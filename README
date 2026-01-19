@@ -1,6 +1,10 @@
 # auto-borgbackups-tui 🛡️
 
-> ⚠️ **Nota de estabilidad:** Este sistema se encuentra en fase **Beta**. El último reporte de QA (19-01-2026) indica un índice de resiliencia del **68%**. Se recomienda su uso para pruebas hasta corregir los hallazgos críticos de lógica.
+![Status](https://img.shields.io/badge/Status-Beta-orange)
+![Resilience](https://img.shields.io/badge/Resilience-68%25-yellow)
+![License](https://img.shields.io/badge/License-MIT-green)
+
+> ⚠️ **IMPORTANTE:** Este proyecto se encuentra en fase **Beta**. Aunque la interfaz es altamente estable (85% UX), el motor lógico ha reportado un índice de resiliencia del 68% en las pruebas de estrés del 19-01-2026. Se recomienda para entornos de prueba o bajo supervisión.
 
 ---
 
@@ -944,17 +948,6 @@ El script solo despertará una vez por hora. Aunque tú querías backups cada 15
 Para un equilibrio simple, configura tu Cron en `*/15 * * * * /ruta/al/script.sh`
 
 Esto permite que el sistema revise tareas frecuentemente sin consumir recursos innecesarios. Si tienes backups muy pesados o carpetas con muchos archivos, este margen de 15 minutos le da tiempo al script para validar permisos y espacio en disco antes de que Borg inicie la transferencia.
-
-
----
-
-## Estado de Calidad y QA
-El proyecto es sometido a pruebas de estrés y funcionalidad. Según el protocolo más reciente:
-* **Resultado Global:** 34/50 puntos aprobados.
-* **UX/TUI:** 85% de cumplimiento (Estable).
-* **Lógica de Respaldo:** En proceso de mejora (56% de tests críticos pasados).
-
-Puedes revisar el detalle completo de los hallazgos en el archivo `2026-01-19.md` dentro del directorio de Tests.
 
 
 ---
