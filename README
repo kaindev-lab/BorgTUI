@@ -1,0 +1,968 @@
+# auto-borgbackups-tui 🛡️
+
+> ⚠️ **Nota de estabilidad:** Este sistema se encuentra en fase **Beta**. El último reporte de QA (19-01-2026) indica un índice de resiliencia del **68%**. Se recomienda su uso para pruebas hasta corregir los hallazgos críticos de lógica.
+
+---
+
+## Introducción
+
+### ¿Qué es BorgTUI?
+
+BorgTUI es un orquestador interactivo para backups, que hace más accesible y confiables los respaldos en uno de los motores de backups más potentes y probados en la actualidad (BorgBackups). Diseñado para la persona que desean o necesitan tener sus datos en seguros y respaldados, sea un PC personal, un servidor o cualquier otro dispositivo con un sistema Linux integrado. No es un “ponlo a correr y olvídate”: su propósito es que puedas operar, supervisar y confiar en que tus backups se realizan de forma simple, rápida y segura.
+
+### ¿Por qué se creo este proyecto?
+
+Este proyecto nace de una lección aprendida por la vía difícil: **usar backups manual no es fiable.** Incluso contando con sistemas robustos y años de información protegida, el trabajo del "día a día" es el más vulnerable. Realizar copias de seguridad manualmente es tedioso y propenso al olvido. Un error accidental o un fallo de hardware pueden borrar semanas de progreso si el último respaldo o algun gestor de versiones no lo uncluia.
+
+
+## ¿Qué diferencia este proyecto de otros gestores?
+
+Hay mcuhas herramientas para gestionar backups, algunas Interfaz Grafica de Usuario (GUI), otras que solo existen en la Temrinal (CLI); unas que siguen una filosofia de "fire and gorget" (ejecuta y olvidate) con confianza ciega en el funcionamiento del sistema y en que las configuraciones sean validas, otras que usan motores distintos a Borg... pero entre tantas opciones, BorgTUI se enfoca en que el sistema sea accesible para el usuario, que de confianza, tranquilidad y que permita conocer en todo momento el estado del sistema mediante notificaciones o un panel central con Interfaz de usuario en la terminal, desde donde se pueda gestionar todo de forma facil y rapida; que podamos concoer que esta pasando, si hay algun problema, y que podamos resolver esos problemas o cambiar las configuraciones mediante unos menus simples e intuitivos. BorgTUI puede correr en practicamente cualquier dispositivo con un Sistema Linux integrado, sea un PC personal, o incluso en un servidor que no tiene interfaz gráfica. Además, el sistema esta diseñado de manera simple, intuitiva, facil de desarrollar y de mantener. Es además, un sistema libre y abierto para que cualquiera pueda unirse o sacarle provecho para gestionar sus proyectos y datos de manera segura y con la tranquilidad de tener su información bien respaldada.    
+
+### Propósito
+
+Los backups solo valen si sabes que funcionan. BorgTUI evita la falsa tranquilidad de procesos silenciosos que fallan en secreto: desde el primer momento el operador debe entender qué está pasando, recibir avisos claros cuando algo no funciona y disponer de herramientas sencillas para investigar y corregir problemas. La prioridad es garantizar confianza operacional, no solo ejecutar tareas en segundo plano.
+
+### Pilares fundamentales
+
+**Simple:** Configuración y uso pensados para ser directos; menos fricción significa menos errores humanos.
+
+**Intuitivo:** Interfaz y mensajes diseñados para personas: explicaciones legibles, consultas rápidas y una vista central que facilita la supervisión y la toma de decisiones.
+
+**Seguro / Resiliente:** 
+
+* Usa de base un gestor de backups (**BorgBackup**) que es uno de los gestores de backups más probados y potentes en la actualidad. Con un sistema no solo seguro y confiable, sino también equilibrado y flexible en lo que refiere a: espacio, velocidad, compresión, encriptación e integridad de los datos. 
+
+* Comportamiento defensivo frente a errores humanos: cuando algo falla, el sistema informa de forma comprensible, registra lo ocurrido y facilita la corrección. 
+
+* Incluye validaciones y correcciones de seguridad:  valida acceso a los datos por respaldar, configuraciones válidas, comprobación de espacio en disco antes de realizar los backups, manejo de valores de emergencia para políticas de rotación, frecuencia y compresión cuando estos datos no son válidos o no sé específican.
+
+
+### Manejo de errores parciales (NO es un todo o nada)
+
+BorgTUI NO aplica una regla de “todo o nada” para la lista de archivos y directorios a respaldar. No pone en riesgo el 99% de tus datos por un 1% inaccesible. Si un backup incluye, por ejemplo, 10 directorios y uno no es accesible, BorgTUI realiza el respaldo de los 9 directorios que sí están disponibles y marca claramente el directorio faltante. Esa información queda registrada en los logs, se muestra en la TUI y, si está configurado, se notifica al operador. De esta forma:
+
+* No pierdes los archivos y directorios validos del respaldo por uno o varios archivos/directorios especificos con problemas (permisos, nombre mal escrito);
+
+* Sabes exactamente qué faltó y por qué, sin revisar manualmente cada archivo o directorio;
+
+* Puedes relizar la corrección (permisos, rutas mal escritas, etc.) antes de un siguiente job crítico.
+
+**Los directorios y archivos individuales si son un todo o nada:** el motor BorgBackups si usa la politica de "todo o nada" en los backups, si ocurre un problema en la creación del backup, el backup no se crea incompleto, solo se crean los backus si todo sale bien. 
+
+### Qué ofrece
+
+Visibilidad inmediata del estado de los respaldos sin necesidad de consultar cientos de logs en intentar entender que está bien y que está mal, que se respaldo y que no; puedes consultarlo todo en un mismo lugar (panel/TUI).
+
+Mensajes humanos y accionables que explican qué falló y por qué (no códigos crípticos como error125).
+
+Capacidad para actuar y corregir desde una sola interfaz: revisar estados, ejecutar acciones y consultar información relevante sin buscar en múltiples archivos.
+
+Notificaciones y avisos para que no te enteres del fallo cuando ya sea demasiado tarde.
+
+
+### Enfoque de diseño
+
+BorgTUI automatiza las tareas que deben automatizarse, pero evita la automatización ciega: favorece la transparencia, la trazabilidad y la rapidez para diagnosticar y corregir problemas. Los backups se ejecutan automáticamente, registran su actividad y notifican al usuario cuando se requiere atención.
+
+
+---
+
+## 2. Diseño y Arquitectura
+
+### 2.1 Estrategia de Encriptación: Eficiencia vs. Complejidad
+
+Para la versión inicial, se ha optado por un sistema **sin encriptación de repositorio (Modo `none`)**. Esta decisión se basa en un análisis de costo-beneficio para el entorno de trabajo actual:
+
+* **Naturaleza de los Datos:** El sistema está diseñado para respaldar el datos con cambios como los datos en `HOME`, proyectos en curso y archivos que, por sí mismos, no contienen información sensible o ya cuentan con sus propias capas de seguridad.
+* **Automatización sin Interrupciones:** La encriptación en backups automáticos presenta un dilema de seguridad: o se requiere intervención humana constante para introducir la clave, o se guarda la contraseña en el sistema (lo cual anula gran parte del beneficio de seguridad).
+* **Optimización de Recursos:** Al eliminar la capa de cifrado, reducimos el uso de CPU y aceleramos los procesos de deduplicación y compresión. Esto permite que el backup sea "invisible" para el usuario durante su flujo de trabajo.
+* **Entorno Seguro:** El sistema esta pensado para ejecuarse en un entorno seguro y que el destino de los respaldos cuenta con el mismo nivel de restricción física y lógica que los datos originales. No esta pensado para manejar datos sensibles o subir datos a espacios publicos. 
+
+> **Nota:** La arquitectura es flexible. Al basarse en BorgBackup, la transición a repositorios encriptados en versiones futuras es técnicamente sencilla si los requerimientos de seguridad del entorno lo ameritan.
+
+---
+
+### Casos de Uso Ideales
+
+Este sistema es fundamental para:
+
+1. **Flujos de trabajo intensivos:** Donde cada minuto de avance cuenta (programación, diseño, redacción).
+2. **Datos Personales Dinámicos:** Fotos, notas y configuraciones que cambian diariamente.
+3. **Usuarios que buscan "Paz Mental":** Delegar la tarea repetitiva de la copia de seguridad a un proceso automático que garantiza que los datos siempre estén ahí.
+
+---
+
+### El Script Orquestador
+
+Se ejecutará mediante un **único Cron cada 15 minutos**. Su función principal es leer las reglas de `backups.conf` y compararlas con el historial en `backups.state`. Toda ejecución de BorgBackup se lanzará con una prioridad de `nice -n 19`, asegurando que el proceso sea "invisible" para el rendimiento del procesador mientras el PC está en uso.
+
+---
+
+### A. Archivo de Configuración (`backups.conf`)
+
+Este archivo es de **solo lectura para el script** y es donde definimos las políticas. Al usar formato INI, facilitamos la edición manual y la organización.
+
+**Ejemplo de estructura:**
+
+```ini
+[100] #NO CAMBIAR ESTE ID, 100 siempre es el ID con la información relacionada al repositorio de BorgBackup.
+categoria = Repositorio BorgBackup
+frecuencia = N/A
+retention = N/A
+rutas = ~/Backups/BorgBackup
+compresion = N/A
+
+[101] #NO CAMBIAR ESTE ID, 101 siempre es el ID del log_file donde se guardan los registros.
+categoria = Registros
+frecuencia = 2.592.000
+retention = 12
+rutas = ~/Backups/Logs_BorgBackup
+compresión = N/A Comprime siempre en '.zip'
+
+[102]
+categoria = Constante
+frecuencia = 900
+retencion = --keep-last 4 --keep-daily 7
+rutas = /home/user/Lab, /home/user/Work
+compresión = false
+
+[103]
+categoria = Diario
+frecuencia = 86400
+retencion = --keep-daily 7
+rutas = /home/user/Archive, /home/user/Work/System
+compresión = false
+
+```
+* **El grupo [100]:** Contiene las configuraciones del repositorio para BorgBackup
+* **frecuencia, retención y compresión:** Por ahora no tieenen ningun función relacionada. Podría usarse para definir unas politicas generales, pero por ahora solo se escriben por mantener coherencia con el formatod e las demás categorias.
+* **rutas:** Ruta del repositorio para BorgBackup
+
+* **El grupo [101]:** Contiene las configuraciones del archivos de registros .log
+* **frecuencia:** establece cada cuantos se hace rotación y comprension de los registros.
+* **retention:** Cantidad maxima de registros comprimidos almacaneados.
+* **rutas:** Las ruta es donde se guarda los registros.
+* **compresión:** Por defecto siempre se comprimen en formato '.zip'. Los logs contendrán muchos patrones repetitivos, para un solo archivo de texto con logs, la compresióne s rapido y el formato '.zip' es muy compatible con cualquier Sistema, y es rapido. Al comprmirlos se ahorraría un **porcentaje** de espacio muy cosniderable y siguen siendo faciles de acceder incluso despues de comprimir en '.zip'.
+
+* **ID:** Cabecera con identificador único numérico que vincula la configuración con el estado, permitiendo hacer cambios como el nombre de la categoria sin perder el historial.
+* **frecuencia:** Tiempo en segundos entre respaldos.
+* **retención:** Parámetros suados en el sistema 'BorgBackup' para la poda automática de archivos antiguos.
+* **rutas:** Rutas de los Directorios y Archivos a respaldar, separados por espacios. Las rutas se escribe igual que como se escribirían en la terminal, con '~' para el home, las rutas con espacios entre comillas: "/tmp/con espacios", o combinado: ~/"con espacios" ('~' dentro de comillas no se expande). 
+* **compresión:** Determina si se comprimen el contenido del backup. Este dato se pasa a BorgBackup que se encarga de hacer la compresión del backup.
+
+---
+
+#### ¿Cómo se define la retención en BorgBackup?
+
+La retención (o "poda") se gestiona a través del comando `borg prune`. Su función es analizar todos los backups (snapshots) que existen en el repositorio y decidir cuáles borrar para ahorrar espacio, basándose en reglas de tiempo.
+
+**1. Opciones principales de retención:**
+
+Borg utiliza prefijos `--keep-` seguidos de un número para definir cuántos archivos conservar en diferentes intervalos:
+
+* **`--keep-last N`**: Conserva los últimos **N** backups realizados, sin importar la fecha.
+* **`--keep-daily N`**: Conserva el último backup de cada día, durante los últimos **N** días que hubo actividad.
+* **`--keep-weekly N`**: Conserva el último backup de cada semana, por las últimas **N** semanas.
+* **`--keep-monthly N`**: Conserva el último backup de cada mes, por los últimos **N** meses.
+* **`--keep-within INTERVALO`**: Conserva todos los backups dentro de un periodo (ej: `1d` para un día, `7d` para una semana).
+
+**2. Sintaxis en el script:**
+
+Para mantener la flexibilidad, en el archivo `backups.conf` utilizaremos la **sintaxis nativa separada por espacios**. Esto permite combinar múltiples reglas para crear una política de retención robusta.
+
+* **Ejemplo de política equilibrada:**
+`retencion = --keep-daily 7 --keep-weekly 4 --keep-monthly 6`
+*Esto guardará: los últimos 7 diarios, 4 semanales y 6 mensuales.*
+
+**3. ¿Por qué usamos la misma sintaxis de Borg?**
+
+* **Sin Traducción:** El script no tiene que procesar la lógica de "qué significa diario"; Borg ya lo sabe.
+* **Flexibilidad Total:** Si mañana quieres usar `--keep-yearly`, solo lo escribes en el `.conf` y el script lo aplicará automáticamente sin que tengamos que programar nada nuevo.
+* **Validación Simple:** Como definimos en el **Nivel 4**, solo verificamos que la cadena empiece con `--keep-`.
+
+---
+
+¿Te parece que esta explicación deja claro cómo el usuario debe configurar sus reglas de limpieza? Si estás de acuerdo, esto cierra perfectamente la arquitectura de la configuración. **¿Te gustaría que definamos cómo el script ejecutará el comando `prune` usando estos datos?**
+
+---
+
+### B. Archivo de Estado (`backups.state`)
+
+Este archivo es **gestionado automáticamente por el script**. Mantiene la memoria operativa del sistema.
+
+**Ejemplo de estructura:**
+
+```ini
+[101]
+categoria = Registros
+ultimo_exito = 1704891600
+tiempo_trasncurrido = 2.591.900 #(1 mes menos 100 segundos)
+tiempo_faltante = 100 #(con freciuencia de 1 mes, faltan 100 segundos para que se necesite un respaldo)
+estado = REALIZADO
+pid = 0
+
+[102]
+Categoria = Constantes
+ultimo_exito = 1704891600
+tiempo_trasncurrido = 902 #(15 minutos con 2 segundos)
+tiempo_faltante = -2 #(con frecuencia de cada 15 minutos, se necesita una respaldo hace 2 segundos)
+estado = PENDIENTE #(Requiere backup, pero no ha inciado el proceso de backup o esta en espera de en un backup en PROCESO, (ejm. ID=103))
+pid = 0
+
+[103]
+Categoria = Diarios
+ultimo_exito = 1704891600
+tiempo_trasncurrido = 86.505 (1 día más 105 segundos)
+tiempo_faltante = -105 #(con frecuencia de 1 día, se necesita el respaldo hace 104 segundos)
+estado = EN-PROCESO #(el sistema se encuentra realizando el backup con el ID 103, es decir, el grupo actual)
+pid = 123
+
+```
+
+* **ID de Sección:** El script utiliza el ID definido en la configuración como cabecera para garantizar la persistencia de los datos.
+* **Categoria:** Un dato que no se considera en la logica de los procesos, solo esta ahí pára servir de referencia cuando el usuario revisa el archivo de estados. Este eprmite tener una mejor diea de a que proceso se refiere, en vez de estar teniendo que consultar el ID en el archivo de configuracion.
+* **ultimo_exito:** Timestamp Unix del último respaldo íntegro.
+* **tiempo_trasncurrido:** `tiempo_trasncurrido = hora actual - ultimo_exito`. 
+* **tiempo_faltante:** `tiempo_faltante = `frecuencia_de_actualización - tiempo_trasncurrido`. Si el tiempo flatante es menor o igual 0, el estado debe de ser de PENDIENTE y si el tiempo trasncurrido es mayor 0, el proceso debe de ser REALIZADO.
+* **estado:** Semáforo de flujo (`REALIZADO`, `PENDIENTE`, `EN-PROCESO`).
+* **pid:** Identificador de proceso para monitoreo de actividad y detección de fallos.
+
+---
+
+### C. Archivo de Registro (`backups.log`)
+
+El log funcionará como una bitácora técnica para auditorias. Cada vez que el script realice una acción o detecte un cambio, escribirá una línea con el siguiente formato:
+
+**Formato:** `[FECHA HORA] [ID] [ESTADO] [INFO_ID] [MENSAJE] [INFO_MENSAJE]`
+
+#### 1. Definición de Campos
+
+* **[FECHA HORA]:** Marca de tiempo del evento (`YYYY-MM-DD HH:MM:SS`).
+* **[ID]:** Identificador numérico único de la categoría.
+* **[ESTADO]:** Define la situación de la tarea en ese instante. Solo existen tres:
+   * `PENDIENTE`: La tarea está a la espera de que se cumpla su frecuencia o su turno.
+   * `EN-PROCESO`: La tarea se está ejecutando actualmente.
+   * `REALIZADO`: La tarea ha finalizado con éxito (incluyendo su respectiva poda de Borg).
+
+
+* **[INFO_ID]:** Registro de los parámetros de configuración vigentes en el momento del registro. Esto permite saber qué se respaldó aunque luego cambies la configuración.
+* *Contenido:* `[Categoría | Frecuencia | Rutas]`
+
+
+* **[MENSAJE]:** La acción exacta que el script está realizando. Solo usaremos estas etiquetas:
+* `CREAR_SNAPSHOT`: Proceso de creación de backup en Borg.
+* `PODA_BACKUPS`: Eliminación de backups antiguos según la política de retención.
+* `ROTACION_LOGS`: Proceso de comprimir el log viejo y vaciar el actual.
+* `LIMPIEZA_LOGS`: Eliminación de archivos comprimidos de log antiguos según la política de retención.
+* `ERROR`: Cualquier fallo en las acciones anteriores. Por ejemplo cuando se detecta un ID con `estado = EN-PROCESO`, pero el 'pid' asociado no se encuentra en ejecución, lo que puede indicar una interrupción en el proceso. 
+
+* **[INFO_ID]:** Infomración expandida del MENSAJE.
+
+* **Si es `CREAR_SNAPSHOT`:** Borg genera metadatos tras cada copia que permiten ver la eficiencia del backup. Mostramos el nombre asignado, su hash único, tiempo de ejecución y la comparativa de tamaños (original vs. lo que realmente ocupa tras comprimir y deduplicar).
+* **Ejemplo:** `Lab-102-2026-01-10_14:30 | a7b8c9d... | 45s | 500MB | 200MB | +12MB`
+
+
+* **Si es `PODA_BACKUPS`:** Al ejecutar la retención (prune), el sistema indica cuántos archivos viejos se borraron y cuántos quedan para asegurar que la política se cumple.
+* **Ejemplo:** `Eliminados: 4 | Conservados: 11 | Espacio liberado: 1.2GB`
+
+
+* **Si es `ROTACION_LOGS`:** Registra el nombre del archivo comprimido generado y el tamaño del log que se acaba de vaciar para tener trazabilidad del histórico.
+* **Ejemplo:** `log_2026_01.zip | 2.5MB | Destino: ~/.config/BorgBackup/logs/`
+
+
+* **Si es `LIMPIEZA_LOGS`:** Indica qué archivo histórico fue eliminado permanentemente al superar el límite de retención configurado.
+* **Ejemplo:** `Eliminado: log_2025_01.zip | Quedan: 12 archivos`
+
+
+* **Si es `ERROR`:** Describe el fallo técnico y, en caso de interrupciones de sistema, identifica si se detectó un proceso "zombi" (estado EN-PROCESO sin un PID activo).
+* **Ejemplo (Fallo):** `REPO_LOCKED | El repositorio está en uso por otro proceso | Acción: Cambio de estado a PENDIENTE`
+* **Ejemplo (Interrupción):** `PID_MISSING | El PID 4521 no existe | Acción: Reseteo de estado para reintento`
+
+
+
+#### 2. Gestión de Rotación y Resguardos Comprimidos
+
+Para mantener el sistema organziado y liviano, usamos la configuración del ID `[101]`:
+
+* **Acción:** Cuando se cumple la `frecuencia` del log, el script detiene temporalmente cualquier nueva tarea de backup.
+* **Compresión:** Toma el contenido de `backups.log`, lo comprime en un archivo `.zip` y lo mueve a la ruta `log_backups`.
+* **Limpieza:** Vacía el archivo `backups.log` (lo deja en 0 bytes) y reanuda la operación normal.
+* **Retención:** Si el número de archivos comprimidos supera `log_retention_amount`, elimina el más antiguo.
+
+---
+
+### D. Localización de Componentes (Estándar XDG)
+
+Para que el sistema sea resiliente, organizado, facil de usar y mantener, el script utilizará las variables de entorno estándar de Linux basados en el estandar XDG para determinar sus rutas de trabajo. Esto permite tener unas rutas claras y bien definidas para lso archivos esenciales para el funcionamiento y registros d elos backups.
+
+#### 1. Archivo de Configuración (`backups.conf`)
+
+* **Ruta:** `$XDG_CONFIG_HOME/backups_manager/backups.conf` (Normalmente `~/.config/backups_manager/`).
+* **Razón (Config):** Es el estándar para datos que el usuario edita manualmente. Al estar aquí, tus reglas de backup se consideran parte del "perfil" del usuario y son fáciles de respaldar o versionar.
+
+#### 2. Archivo de Estado (`backups.state`)
+
+* **Ruta:** `$XDG_DATA_HOME/backups_manager/backups.state` (Normalmente `~/.local/share/backups_manager/`).
+* **Razón (Data):** Según el estándar, aquí van los datos persistentes que el programa genera para funcionar pero que el usuario **no debe editar**. Al separarlo de la configuración, evitamos que un error de edición manual en el `.conf` corrompa accidentalmente la memoria operativa del script.
+
+#### 3. Archivo de Registro Activo (`backups.log`)
+
+* **Ruta:** `$XDG_CACHE_HOME/backups_manager/backups.log` (Normalmente `~/.cache/backups_manager/`).
+* **Razón (Cache):** Los logs son datos volátiles que crecen con el tiempo. XDG sugiere que los datos que pueden ser recreados o que son de carácter histórico (como registros de eventos) residan en la caché. Esto permite que el sistema identifique estos archivos como "rotables" o "limpiables" si el espacio en disco es crítico.
+
+---
+
+### E. Resumen de Rutas y Responsabilidades
+
+| Componente | Variable XDG | Ruta por Defecto | Responsabilidad |
+| --- | --- | --- | --- |
+| **Configuración** | `XDG_CONFIG_HOME` | `~/.config/backups_manager/` | **Usuario:** Define rutas, frecuencias e IDs. |
+| **Memoria (Estado)** | `XDG_DATA_HOME` | `~/.local/share/backups_manager/` | **Script:** Registra PIDs, éxitos y tiempos. |
+| **Bitácora (Log)** | `XDG_CACHE_HOME` | `~/.cache/backups_manager/` | **Script:** Escribe eventos técnicos en tiempo real. |
+| **Repositorio** | *(Personalizada)* | *(Definida en ID 100)* | **Borg:** Almacena los bloques de datos. |
+| **Logs ZIP** | *(Personalizada)* | *(Definida en ID 101)* | **Script:** Guarda los registros históricos comprimidos. |
+
+---
+
+### F. Herramientas Necesarias (Dependencias)
+
+Antes de iniciar la Fase 1, el script debe validar la existencia de estas herramientas en el `$PATH`. La ausencia de cualquiera de ellas (excepto las opcionales) activará un bloqueo de ejecución.
+
+#### 1. Herramientas Críticas (Sin ellas, el script falla)
+
+* **BorgBackup (`borg`)**: El motor de deduplicación y creación de snapshots. Es el corazón del sistema.
+* **GNU Coreutils**:
+* `date`: Para obtener Timestamps Unix y calcular `tiempo_transcurrido`.
+* `mkdir`, `touch`, `rm`: Para la gestión de directorios y archivos de estado/logs.
+* `stat`: Para verificar permisos y tamaños de archivos de forma precisa.
+* `cron`: Para programar la ejecución del Script que gestiona los backups.
+* `trap`: Para asegurar la ejecuciónd e instrucciones incluso si hayinterrupciones en el sistema.
+
+* **Procesamiento de Texto**:
+* `grep` / `sed`: Fundamentales para parsear (leer) los archivos `.conf` y `.state` en formato INI.
+* `awk`: Necesario para realizar los cálculos matemáticos de `tiempo_faltante` y formatear las columnas del log.
+
+
+
+* **Herramientas de Gestión de Logs y Sistema**
+* **Zip / Gzip**: (Rotación de logs). El script necesita comprimir los archivos `.log` antes de moverlos al histórico.
+* **Utilidades de Proceso**:
+* `ps`: Para verificar si el `PID` guardado en el archivo de estado sigue activo (detección de procesos zombis).
+* `nice`: Para asegurar que el backup corra con prioridad baja y no ralentice el PC.
+
+
+
+* **Herramientas de Interfaz (Comunicación con el Usuario)**
+* **`notify-send`** (libnotify): Para enviar las notificaciones visuales al escritorio (imprescindible si el script corre en segundo plano vía Cron).
+
+### Herramienats del Script TUI (User Interface para la Terminal)
+* **`lnav`** Herramienta predefinida para el monitoreo de logs, por su capacidad de búsqueda y colores automáticos; si no está instalado.
+* **`tail`**: Herramienta simple para monotorizar archivos como el de los Logs en tiempo real. Se usará como alternativa a `lnav` caundo esta no este presente en el sistema.
+* **whiptail** (TUI): Interfaz interactiva de termianl más amigable con el usuario.
+* **nano**: Editor de texto usado para cosas como que el usuario edite las configuraciones.
+
+
+---
+
+## 3. Lógica del Sistema:
+
+**Nota de Auditoría:** Para garantizar la trazabilidad total, **cada paso** genera un registro obligatorio. Se utiliza la palabra clave **LOG-LEVEL** para definir la severidad. Todo registro implica escritura en el archivo `.log` e impresión en terminal (con colores). Las notificaciones visuales (`notify-send`) se emiten en niveles `ERROR` y `CRITIC`, o si se activa el parámetro `FORZAR_NOTIF`.
+
+---
+
+## 3.1. Fase 1 (Validaciones de Integridad Critica)
+
+Primeras valdiaciones del sistema que eprmiten identificar el estado del sistema y decidir si es fatible continuar el programa con la configuración actual.
+
+---
+
+### Nivel -1: Inicialización de Canales (Pre-validación de Comunicación)
+
+Este nivel garantiza que el sistema pueda informar de sus procesos. Si falla, el script no puede registrar errores ni procesos, por lo que aborta inmediatamente.
+
+1. **Validación y Activación del Archivo de Log:**
+* **Acción:** Comprobar si existe el directorio `~/.cache/backups_manager/`. Si no existe, se crea.
+* **Acción:** Comprobar existencia de `backups.log`.
+* **Si existe:** Se verifican permisos de escritura para asegurar la continuidad del registro. **LOG-LEVEL: INFO**.
+* **Si no existe:** Se crea el archivo mediante `touch`. **LOG-LEVEL: WARN** (Indica inicio de nueva bitácora).
+
+
+* **Fallo Crítico:** Si no hay permisos para crear el directorio o escribir en el archivo. **Acción:** Abortar con error en terminal. **LOG-LEVEL: CRITIC**.
+
+
+2. **Verificación de Capacidades de Comunicación (Semáforos):**
+* **Acción:** Validar presencia de `notify-send` y sesión gráfica activa (`$DISPLAY` o `$WAYLAND_DISPLAY`).
+* **Resultado:** Se definen las variables booleanas `HAS_NOTIFY` y `HAS_DISPLAY`. **LOG-LEVEL: INFO**.
+
+
+
+---
+
+### Función de Información Unificada (`log_msg`)
+
+**LOG-LEVEL: `none**` (Definición de herramienta).
+
+Centraliza la salida de datos. Recibe: `NIVEL`, `CONTEXTO`, `MENSAJE` y `FORZAR_NOTIF`.
+
+* **Terminal:** Impresión inmediata con códigos de color (Verde para INFO, Rojo para ERROR/CRITIC, Amarillo para WARN).
+* **Archivo Log:** Escritura con marca de tiempo y contexto.
+* **Notificación:** Valida si hay herramientas de notificación e interfaz grafica activa (HAS_NOTIFY AND HAS_DISPLAY  == true)
+   * Si las hay: Ejecuta `notify-send` si `(NIVEL == ERROR|CRITIC OR FORZAR_NOTIF == true)`
+   * Si no las hay: No ejecuta nada. **LOG-LEVEL: WARM**.
+
+---
+
+### Nivel 0: Control de Instancia Única (Lockfile y Gestión de PIDs)
+
+Previene la corrupción de datos evitando que dos instancias del script (ej. lanzadas por un Cron solapado) operen simultáneamente sobre el mismo repositorio o archivo de estado.
+
+1. **La Trampa de Limpieza (`trap`):**
+* **Acción:** Antes de cualquier validación, se define: `trap 'rm -f "$LOCKFILE"; exit' EXIT SIGINT SIGTERM`.
+* **Razón:** Garantiza que el archivo de bloqueo se elimine siempre, ya sea por finalización exitosa, interrupción del usuario (Ctrl+C) o fallo crítico del sistema (Kill), evitando "falsos positivos" en ejecuciones futuras. **LOG-LEVEL: none**.
+
+
+2. **Validación de Existencia:**
+* **Acción:** Comprobar si existe `$XDG_RUNTIME_DIR/backups_manager.lock`.
+* **Si existe:** Se lee el PID interno y se verifica si el proceso sigue activo en el sistema.
+* **PID Inactivo:** El archivo es un residuo de un reinicio abrupto. Se elimina. **LOG-LEVEL: INFO**.
+* **PID Activo:** Hay una tarea en curso. **Acción:** Abortar. **LOG-LEVEL: CRITIC**.
+
+
+* **Si no existe:** El sistema está libre. **LOG-LEVEL: INFO**.
+
+
+3. **Creación de Bloqueo:**
+* **Acción:** Se escribe el PID actual (`$$`) en el archivo. **LOG-LEVEL: INFO**.
+
+
+
+---
+
+### Nivel 1: Acceso a Archivos de Control (Estándar XDG)
+
+1. **Estructura de Directorios:** Validación y creación (si no existen) de las rutas base:
+* `~/.config/backups_manager/` (Configuración).
+* `~/.local/share/backups_manager/` (Estado/Memoria).
+* **LOG-LEVEL: none** (Definición de rutas).
+
+
+2. **Archivo de Configuración (`backups.conf`):**
+* **Si existe:** Se verifica que sea legible. **LOG-LEVEL: INFO**.
+* **Si no existe:** Se crea la plantilla inicial con comentarios guía para el usuario. **LOG-LEVEL: WARM** (Requiere `FORZAR_NOTIF=true` para indicar al usuario que debe configurar sus rutas).
+
+
+3. **Archivo de Estado (`backups.state`):**
+* **Acción:** Validación o inicialización con cabecera técnica. **LOG-LEVEL: INFO**.
+
+
+4. **Fallo de Acceso:** Cualquier error de permisos en estos puntos detiene el script por seguridad. **LOG-LEVEL: CRITIC**.
+
+```ini
+# =============================================================================
+#           CONFIGURACIÓN DEL GESTOR DE BACKUPS (BORG_MANAGER)
+# =============================================================================
+#
+# SECCIÓN 1: CONFIGURACIÓN DEL SISTEMA (IDs 100 y 101)
+# -----------------------------------------------------------------------------
+# [100] REPOSITORIO: Es el lugar "físico" donde se guardan tus copias.
+# [101] LOGS: Controla la limpieza y el historial de los registros de error.
+#
+# SECCIÓN 2: TAREAS DE USUARIO (IDs 102 en adelante)
+# -----------------------------------------------------------------------------
+# FRECUENCIA: Segundos entre backups (900=15min, 3600=1h, 86400=1día).
+# RUTAS: Directorios a respaldar (Ej: /home/usuario/Documentos).
+# RETENCION: Cuántas copias viejas guardar (Ej: --keep-last 5).
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# SECCIÓN 1: CONFIGURACIÓN DEL SISTEMA (REPOSITORIO Y LOGS)
+# -----------------------------------------------------------------------------
+
+[100]
+categoria = Repositorio Principal de Datos
+# ¿DÓNDE se guardarán todos los backups? (Ruta a tu disco o carpeta de destino).
+# Ejemplo: /media/usuario/disco_externo/copias_borg
+rutas = ~/Home/Backups/Borg-Backups/Repository
+# No tocar para esta versión:
+encryption = none
+
+[101]
+categoria = Historial y Rotación de Logsn
+# ¿Cada cuánto tiempo procesar y limpiar el archivo de log? (2592000 = 1 mes).
+frecuencia = 2592000
+# ¿Cuántos archivos .zip de historial quieres conservar?
+retencion = 12
+# ¿DÓNDE guardar los .zip? (Si se deja vacío, el log se limpia pero NO se guarda).
+rutas = ~/Home/Backups/Borg-Backups/Logs
+
+# -----------------------------------------------------------------------------
+# SECCIÓN 2: TAREAS DE RESPALDO (AÑADE TUS ARCHIVOS Y CARPETAS AQUI)
+# -----------------------------------------------------------------------------
+# Instrucciones:
+# - Usa IDs únicos empezando desde el 102.
+# - En RUTAS puedes poner varias carpetas y archivos separadas por esacios y
+#   Si las rutas tienen espacios, encierra la ruta entre comillas.
+# - En COMPRESSION usa 'True' para ahorrar espacio o 'False' para más velocidad.
+
+# Ejemplo:
+# [102]
+# categoria = Nombre de mi Tarea
+# frecuencia = 3600
+# rutas = /home/usuario/Carpeta1, /home/usuario/Carpeta2
+# retencion = --keep-last 5 --keep-daily 7
+# compression = True
+
+# >>> ESCRIBE TUS NUEVAS CATEGORÍAS A PARTIR DE AQUÍ <<<
+
+```
+
+
+
+---
+
+### Nivel 2: Dependencias (Escaneo de Entorno)
+
+1. **Herramientas Críticas:** Escaneo de `borg`, `coreutils`, `cron`, `trap`, `zip`, `ps`, `grep`, `awk`.
+* Si faltan: El script no puede garantizar la integridad del backup. **Acción:** Detener. **LOG-LEVEL: CRITIC**.
+
+
+2. **Herramientas Opcionales:** Escaneo de `libnotify-bin` (notify-send).
+* Si faltan: El script funcionará solo en modo texto. **LOG-LEVEL: WARN** (FORZAR_NOTIF=true).
+
+**Nota:** Las herramientas implementadas estan especificadas en la sección de dependencias.
+
+---
+
+### Nivel 3: Infraestructura del Repositorio (ID 100)
+
+1. **Accesibilidad Física:** Verifica que la ruta del ID 100 exista y sea escribible. **LOG-LEVEL: INFO**.
+2. **Integridad Estructural (Borg):** Ejecuta `borg info`.
+* **Repositorio Válido:** Estructura reconocida. **LOG-LEVEL: INFO**.
+* **Directorio Vacío:** Se ejecuta `borg init --encryption=none`. **LOG-LEVEL: WARM** (FORZAR_NOTIF=true).
+* **Corrupción/Error:** Borg no reconoce la carpeta a pesar de tener datos. **LOG-LEVEL: CRITIC**.
+
+
+3. **Estado de Bloqueo del Repositorio:**
+* Verifica si el repositorio está bloqueado por otro proceso (o una interrupción anterior).
+* **Acción:** Si está bloqueado, se notifica y aborta para evitar daños. **LOG-LEVEL: ERROR**.
+
+---
+
+### Nivel 4: Validación de Parámetros de Log (ID 101)
+
+* Este nivel garantiza que el archivo de bitácora (`backups.log`) no crezca indefinidamente, protegiendo el espacio en disco del sistema.
+* Aqui se guardan los valores de de los parametros de frecuencia y retención, sean valores validos en al configuraciÓn del usuario, o sean valores de emergencia (30d, 12u). 
+
+1. **Validación de Datos:** Comprueba que `frecuencia` y `retencion` sean enteros.
+* Si fallan: Se guarda en las variables frecuencia y retencion los valores de emergencia (30 días = 2.592.000 de frecuencia, 12 archivos de retención). **LOG-LEVEL: WARN** (FORZAR_NOTIF=true).
+
+
+2. **Ruta de Históricos:**
+* **Ruta Válida:** La ruta es real y accesible, Informa y guarda la ruta en la variable de ruta para logs. **LOG-LEVEL: INFO**.
+* **Ruta Inválida/Vacía:** 
+   * Si la ruta esta especifica, pero el directorio no existe, intenta crearla. 
+      * logra crearla y guarda la ruta en la variable. **LOG-LEVEL: WARM**.
+      * NO logra crearla. **LOG-LEVEL: WARN** (FORZAR_NOTIF=true).
+   * Si la ruta no esta especifica o no es accesible, informa y no guarda nada.**LOG-LEVEL: WARN** (FORZAR_NOTIF=true).
+
+
+3. Al final se informan los datos que se usarán para los logs (frecuencia, retenciÓn, ruta). **LOG-LEVEL: INFO**.
+
+
+
+## 3.2. Fase 2 (Filtrado y Procesamiento de Datos)
+
+Esta fase actúa como un filtro. Toma la configuración bruta del usuario (`backups.conf`), la limpia, aplica valores de seguridad si es necesario y genera una instrucción válida. Estos datos filtrados se guardan en el archivo de estado (`backups.state`) para ser utilizados posteriormente por Borg.
+
+A diferencia de la fase anterior, esta fase no detiene el script si una tarea falla; simplemente **inhabilita la tarea corrupta** o la **corrige en memoria** para proteger la integridad de los datos y del resto del ciclo.
+
+Los datos procesados corresponden a las categorías de directorios y archivos a respaldar, establecidos en el archivo de configuración (`backups.conf`). El manejo de los parámetros es el siguiente:
+
+### 1. Frecuencia (Sincronización)
+
+* **Regla:** Debe ser un entero positivo.
+* **Tratamiento:** Si el valor está vacío o no es numérico, se aplica el **Valor de Emergencia: 86400** (1 día).
+* **LOG-LEVEL:** `WARN` (FORZAR_NOTIF=true). Informa: "Frecuencia inválida para ID [ID] [Categoría]. Aplicando Valor de Emergencia: 86400".
+
+### 2. Parámetros de Retención (Poda Inteligente)
+
+El script actúa como un filtro de seguridad para evitar que comandos mal formados corrompan la ejecución de Borg.
+
+* **Proceso de Limpieza:** (**LOG-LEVEL:** `INFO`)
+1. Se descompone la cadena en pares (Parámetro + Valor).
+2. Se comparan los parámetros contra la **Lista Blanca**: `--keep-last, --keep-hourly, --keep-daily, --keep-weekly, --keep-monthly, --keep-yearly, --keep-within`.
+3. Se verifica que cada valor asociado sea un número entero.
+
+
+* **Acción ante Fallos:**
+* **Fallo Parcial:** Si una regla es inválida (ej: `--keep-random 5`), se elimina de la cadena. El script continúa con el resto de opciones válidas. **LOG-LEVEL: WARN** (FORZAR_NOTIF=true).
+* **Fallo Total:** Si después de la limpieza la cadena queda vacía o el campo original estaba vacío, se aplica la **Política de Emergencia: `--keep-daily 7**`. **LOG-LEVEL: WARN** (FORZAR_NOTIF=true).
+
+
+
+### 3. Rutas de Origen (Sanitización de Directorios)
+
+* **Tratamiento:** (**LOG-LEVEL:** `INFO`)
+1. Se expanden rutas relativas (ej: `~` a `/home/usuario`).
+2. Se eliminan las barras finales (`/`) para garantizar compatibilidad con el estándar de BorgBackup.
+3. Se verifica la existencia y lectura de cada ruta.
+4. Se guardan las rutas en el archivo de estado, separadas por espacios entre ellas y encerradas entre comillas.
+
+
+* **Acción ante Fallos:**
+* **Ruta Huérfana:** Si una ruta no existe o no es accesible, se omite de la lista. **LOG-LEVEL: WARN** (FORZAR_NOTIF=true).
+* **Sin Rutas Válidas:** Si ninguna ruta es real, la categoría completa **no se transfiere al archivo de estados** para evitar errores en el procesamiento de backups. **LOG-LEVEL: WARN** (FORZAR_NOTIF=true).
+
+
+
+### 4. Compresión (True|False = 0|1)
+
+* **Tratamiento:** El script normaliza la entrada a minúsculas.
+* **Lógica Binaria:** * `true` (en cualquier combinación de mayúsculas)  Se guarda **0** (Activado).
+* Cualquier otro valor (o vacío)  Se guarda **1** (Desactivado).
+
+
+* **LOG-LEVEL:** `INFO` si es válido, `WARN` si el valor era ambiguo y se asumió `false`.
+
+---
+
+### Archivo de Estado (`backups.state`)
+
+Este archivo es **gestionado automáticamente por el script**. Mantiene la memoria operativa del sistema con los valores filtrados.
+
+**Ejemplo de estructura:**
+
+```ini
+[101]
+categoria = Registros
+ultimo_exito = 1704891600
+tiempo_trasncurrido = 2591900
+tiempo_faltante = 100
+estado = REALIZADO
+pid = 0
+
+[102]
+categoria = Constantes
+frecuencia = 900
+retencion = --keep-last 4 --keep-daily 7
+rutas = /home/user/Lab /home/user/Work
+compresion = 1
+ultimo_exito = 1704891600
+tiempo_trasncurrido = 902
+tiempo_faltante = -2
+estado = PENDIENTE
+pid = 0
+
+```
+
+* **ID de Sección:** Utiliza el ID de la configuración como cabecera.
+* **categoria:** Referencia textual para el usuario.
+* **frecuencia:** Valor numérico entero (segundos).
+* **retencion:** Parámetros validados para la poda de Borg.
+* **rutas:** Rutas absolutas separadas por espacios, sin barra final (`/`).
+* **compresion:** `0` para activo (true), `1` para inactivo (false).
+* **ultimo_exito:** Timestamp Unix del último respaldo exitoso.
+* **tiempo_trasncurrido:** `hora actual - ultimo_exito`.
+* **tiempo_faltante:** `frecuencia - tiempo_trasncurrido`. Si es , el estado pasa a **PENDIENTE**.
+* **estado:** Semáforo de flujo (`REALIZADO`, `PENDIENTE`, `EN-PROCESO`).
+* **pid:** Identificador de proceso activo o `0` si está inactivo.
+
+---
+
+### Lógica de Sincronización (Conf vs. State)
+
+Para cada ID procesado, el script realiza una comparación entre los datos nuevos del archivo de configuración (`.conf`) y los datos históricos del archivo de estado (`.state`).
+
+#### 1. Persistencia de Marcas de Tiempo y Estado
+
+Para evitar que un cambio en la configuración reinicie el ciclo de backups, se aplican las siguientes reglas de actualización:
+
+* **Si el ID NO existe en `.state`:** Se crea la sección desde cero. Se inicializa `ultimo_exito = 0`, `estado = PENDIENTE` y `pid = 0`. **LOG-LEVEL: INFO**
+* **Si el ID YA existe en `.state`:** Se actualzan los campos: `categoria`, `frecuencia`, `retencion`, `rutas` y `compresion` siempre se sobrescriben con los valores nuevos procesados en esta fase. **LOG-LEVEL: INFO**
+
+#### 2. Datos que se preservan
+
+Hay datos que se calculan en tiempo de ejecución y guardan información critica para el funcionamiento correcto de los backups automaticos. Estos datos no se actualizan respecto al archivo de configuraciones, sino que se actualizan solo en tiempo de ejecución. Estos datos son:
+
+* `ultimo_exito` y `pid`. No se tocan, ya que representan la historia y la actividad real del proceso.
+* **Estado:** Solo se actualiza si el valor actual es `REALIZADO` y tras el nuevo cálculo de tiempos el `tiempo_faltante` resulta  (pasando a `PENDIENTE`). Si el estado es `EN-PROCESO`, se respeta para evitar colisiones.
+* `tiempo trasncurrido` y `tiempo faltante` se calculan en en timepo de ejecución en base a la hora actual y el `ultimo exito`.
+
+#### 3. Limpieza de Tareas Huérfanas
+
+Si un ID existe en el archivo `.state` pero ha sido eliminado del archivo `.conf` (o ha sido invalidado por no tener rutas reales):
+
+* **Acción:** El script elimina por completo esa sección del archivo `.state`. **LOG-LEVEL: WARN** (FORZAR_NOTIF=true).
+* **Razón:** Mantener el archivo de estado ligero y evitar que el orquestador intente ejecutar tareas que el usuario ya no desea.
+
+### 3. Duplicidad de IDs
+
+Se creará una lista de IDs procesados y antes de procesar una nueva categoria, se valida si su ID ya fue procesado. Si se identifica que el ID ya fue procesado, se valdia si los datos son diferentes:
+
+* Si los datos son diferentes: Se asigna un nuevo ID a la categoria y se registra en al lista de IDs. **LOG-LEVEL: WARN**.
+* Si los datos no son iguales: Se omite la creación de la categporia en el archivo de estados. **LOG-LEVEL: WARN** (FORZAR_NOTIF=true). 
+
+#### 5. Filtrado de Datos y Prevenmción de errores.
+
+Para un mejor procesamiento, se tomarán medidas como:
+
+* Antes de prcesar los datos, se eliminara todo lo que venga depeues de # (comenatrio) (s/#.*$//)
+
+---
+
+### Formato de Salida de Log (Fase 2 Finalizada)
+
+Al terminar esta sincronización, el script emite un resumen final de la cola de trabajo:
+
+> `[INFO] [SYSTEM] : Actualización de datos finalizada. Sincronizados [X] IDs. Tareas en espera: [Y].` **LOG-LEVEL: INFO**.
+
+
+
+---
+
+
+
+## 3.3 Fase 3 (Procesamiento de los datos y creación de los backups)
+
+En esta etapa, el script deja de validar y empieza a transformar los estados de las tareas mediante la interacción con **BorgBackup** y el **Sistema de Archivos**.
+
+### 1. El Algoritmo del Motor de Cálculos (Pre-Bucle)
+
+Antes de ejecutar, debemos transformar la "memoria" del script (`.state`) en una lista de prioridades.
+
+1. **Lectura de Estados:** Se cargan todos los IDs del archivo `.state`.
+
+2. **Actualzia los estado con respecto al timepo actual:**
+Realiza los calculos de los valores asociados a cada ID para usarlos en el programa y actualiza los valores en el `.state`.
+* `ahora=$(date +%s)`
+* `tiempo_trasncurrido = ahora - ultimo_exito`
+* `tiempo_faltante = frecuencia - tiempo_trasncurrido`
+
+3. **Marcado de Estados:**
+* Si `tiempo_faltante <= 0` AND `estado == "REALIZADO"` → Cambiar a `PENDIENTE`. **LOG-LEVEL: INFO**
+* Si `estado == "PENDIENTE"` AND `tiempo_faltante >= -frecuencia` (lleva almenos 1 retraso en 1 back) → Notifica el **Retraso**. **LOG-LEVEL: WARN** (FORZAR_NOTIF=true).
+* Si `estado == EN-PROCESO` AND `PID no esta corriendo` → Cambiar a `PENDIENTE`. Esto indica que se incio el proceso de backup con ese ID asociado, pero algo salio mal. **LOG-LEVEL: WARN** (FORZAR_NOTIF=true).
+
+### Ordenamiento 
+
+Se genera una **Cola de Trabajo** ordenada para todos los id con estado en `PENDIENTE` y se ordenan por `tiempo_faltante` (de menor a mayor). Esto asegura que lo más urgente se haga primero. Es de menor a mayar, porquea menor tiempo faltante, mayor es la prioridad, por ejemplo si `tiempo_faltante = -300` significa que hace 300 segundos se debio haber realizado el backup.
+
+### Validación de Viabilidad de Espacio
+
+Para prevenir interrupciones críticas por falta de almacenamiento, el script realiza un cálculo de seguridad antes de invocar a Borg. Se obtiene el tamaño total de las rutas de origen (sin comprimir) y se compara con el espacio disponible en la partición del repositorio.
+
+* **Bloqueo de Estado:** Antews de valdiar cualquier ID, actualiza el `.state` con `estado=EN-PROCESO`. **LOG-LEVEL: INFO**
+
+* La regla de validación es: **Espacio_Disponible > (Tamaño_Datos_Origen + 1GB)**
+
+* Sin Factor de Compresión: Se omite intencionalmente el cálculo de compresión o deduplicación. Esto garantiza que el proceso sea exitoso incluso con archivos ya comprimidos (multimedia, cifrados) o en respaldos iniciales donde Borg aún no tiene una base de datos de fragmentos previa.
+
+* Margen de Seguridad (1GB): Este colchón de 1GB protege al sistema operativo de bloqueos por llenado absoluto y permite el crecimiento de los archivos de caché y metadatos propios de Borg durante la operación.
+
+* Acción en caso de insuficiencia: Si no se cumple la regla, se registra como LOG-LEVEL: CRITIC, se omite el ID actual para no interrumpir la cola y se continúa con el siguiente ID, que tambiébn valida el espacio.
+
+* **Solos e debe hacer 1 backup a la vez y antes haber pasado por la validaciónd e espacio** Se debe hacer 1 a la vez porque quiza en el siguiente ID ya el espacio no sea suficiente, pro eso se debe valdiar el esapcio y procesar los backups 1 a la vez. 
+
+### Ejecución del Binomio Borg (Create + Prune)
+
+Luego de verificar la viabilidad de espacio del ID, se procede a crear el backups y hacer limpieza de los backups antiguos.
+
+**Ejecución de borg create:** Una vez validado el espacio, se lanza el proceso de respaldo utilizando los flags de compresión definidos en el perfil de cada ID:
+
+* Compresión Inteligente (Flag 0): Si el campo compresion == 0, se aplica --compression zstd,6. Este nivel se selecciona por ser el estándar moderno de "punto equilibrado": ofrece una tasa de reducción superior a gzip con una velocidad de descompresión comparable a lz4, ideal para uso general.
+
+* Sin Compresión (Flag != 0): Si el campo compresion tiene cualquier otro valor (típicamente 1), se aplica --compression none.
+
+* Cada que se incia el proceso de creación se guarda el log: **LOG-LEVEL: INFO**
+
+**Evaluación de Salida ($?):**
+
+* Si `create` da **Éxito (0)** → Proceder a `borg prune` usando la cadena de retención validada. **LOG-LEVEL: INFO**
+   * Si `prune` da **Éxito (0)** → Saltar al siguiente ID. **LOG-LEVEL: INFO**
+   * Si `create` da **Fallo (!0)** → Registrar error, `estado=PENDIENTE`, `pid=0` y saltar al siguiente ID. **LOG-LEVEL: WARN** (FORZAR_NOTIF=true).
+
+* Si `create` da **Fallo (!0)** → Registrar error, `estado=PENDIENTE`, `pid=0` y saltar al siguiente ID. **LOG-LEVEL: WARN** (FORZAR_NOTIF=true).
+
+
+---
+
+### Caso Especial Mantenimiento de Bitácora (ID 101)
+
+Ya que los logs (ID 101) se manejan de manera distinta a como se manejan las tareas a respaldar (IDs 102+), se crea un caso espacial para el manejo de los logs, que usan unas politicas de retención espacial.
+
+1. **Condición de Activación:** `(tiempo_faltante_ID101 <= 0)`.
+2. **Proceso de Rotación:**
+* Se comprime en `.zip` hacia la ruta definida en el ID 101 y guarda los logs con el nombre `backups_YYYYMMDD.log`. **LOG-LEVEL: INFO**.
+* Se aplica la poda: Si hay más de `X` (retención) archivos zip, se eliminan los logs del más antigupo al más reciente, hasta que `cantidad_logs == retention_logs`. **LOG-LEVEL: INFO**.
+* Se limpia el archivo de logs (backups.log). **LOG-LEVEL: INFO**.
+
+
+---
+
+Este es el plan organizado y estructurado para la documentación de la **UI y Gestión**, integrando los detalles técnicos del archivo de configuración propio del panel y la lógica de validación de dependencias.
+
+---
+
+## 4. UI, UX y Herramientas de Gestión
+
+### Notificaciones y Experiencia de Usuario
+
+Para ofrecer una experiencia fluida y evitar la saturación de mensajes, el sistema sigue una política de **mínima interrupción**:
+
+* **Intervención Requerida:** Solo se enviarán notificaciones emergentes al escritorio (vía `notify-send`) cuando ocurran errores críticos que requieran la atención inmediata del usuario.
+* **Seguridad en Segundo Plano:** El resto de la actividad se registra silenciosamente en los archivos de log. El script detecta si hay una sesión gráfica activa; si no la hay (ejecución por cron puro), omite las notificaciones visuales para evitar errores de sistema.
+
+### Panel de Control (Borg-TUI)
+
+Además del Script Orquestador, se dispone de un programa adicional con un menú interactivo en terminal para gestionar el sistema desde un solo lugar:
+
+* **Monitoreo en Tiempo Real:** El sistema intentará abrir **`lnav`** por su capacidad de búsqueda y colores automáticos; si no está instalado, usará **`tail -f`** como alternativa.
+* **Gestión Rápida:** Opciones para editar la configuración de tareas, forzar respaldos inmediatos y consultar el estado de los archivos en el repositorio (ID 100).
+
+#### Arquitectura del Panel
+
+El panel utiliza su propio archivo de configuración en `~/.config/backups_manager/backupsTUI.conf` para almacenar parámetros específicos de la interfaz que no pertenecen a la lógica de backups.
+
+#### Lógica del Panel
+
+* **Uso de los Logs:** El Panel TUI no solo consulta los logs para mostrarlos al usuario, sino que también registra sus propias acciones administrativas en `backups.log` para mantener la trazabilidad.
+* **Manejo de Dependencias:** Al inicio, el programa valida herramientas exclusivas de la interfaz (`whiptail`, `lnav/tail`, `nano`) y además valida nuevamente ptodas las dependencias del script orquestador, con el fin de mostrar al usuario claramente cuanto falta alguna dependencia. La idea es que si el suaurio cuenta con el usuario instala el script TUI, el proceso sea más simple, claro e intuitivo desde la misma TUI.
+Podría consultar las validaciones de dependencias registradas en los logs para simplificar el proceso al sistema, pero no quiero crear mucha dependencia entre ambos scripts para facilitar el mantenimiento y desarrollo de ambos sistemas (orquetador y TUI). Y más cuando el sistema es liviano y esta repetición de validaciones no añade nimucho codigo, ni añade una necesidad de procesamiento considerable. Lo que si se peude hacer es reutiklizar el codigo de valdiación suado en el script orquestador e implementarlo en el script TUI con las validaciones extras necesarias.
+* **Configuración Inicial:** Si el archivo de configuración del panel no existe, se crea automáticamente y solicita al usuario la ruta del script orquestador. Acto seguido, ejecuta el script orquestador que actualiza el sistema y crea los archivos y configuraciones faltantes. Durante la ejecución del script orquetador el Panel muestra los Logs que se van generando para de esta manera ser claros con que el script se esta ejecutando y saber que esta ejecutando.
+* **Inicio del Programa:** Tras la carga y validaciones, el sistema presenta un resumen del estado actual (éxitos, fallos y causas) basado en los logs generados por el script orquestador. Luego el Panel despliega el menú de opciones para la interacción del usuario.
+
+#### Opciones del Usuario
+
+El menú interactivo permite:
+
+1. **Visualizar Registros:** Acceso al monitor de logs en tiempo real (backups.log).
+2. **Estado del Sistema:** Resumen de tareas pendientes y ejecutadas (backups.config).
+3. **Mantenimiento:** Consultas de integridad y listado del repositorio Borg.
+4. **Configurar Tareas:** Apertura del editor para el archivo `.conf` de backups.
+5. **Ejecución Manual:** Lanzamiento forzado del orquestador.
+0. **Salir**
+
+### Mejoras Futuras
+
+Para simplificar el uso a perfiles no técnicos, se planea implementar:
+
+* **Selección Visual:** Integración con gestores de archivos para añadir rutas de respaldo mediante selección directa.
+* **Formularios Guiados:** Creación y edición de tareas (IDs) mediante asistentes que eliminen la necesidad de editar archivos de texto manualmente.
+
+
+---
+
+## 5. Instalación y Despliegue
+
+El sistema está diseñado para ser "Portable" y "Auto-instalable":
+
+1. **Bash Alias / Path:** Se recomienda copiar el script orquestador y el scrpt TUI a `~/.local/bin` (programa personal), o en `/usr/local/bin/backup` (programa para todo el sistema y sus usuarios).
+2. **Auto-Bootstrap:** Al ejecutarse por primera vez, el script orquetador detectará la ausencia de directorios XDG y del archivo `.conf`, creará una plantilla básica que le usaurio podrá llenar segun sus preferencias.
+3. **Configuración-TUI:** La interfaz TUI al inciarse valida y solicita la ubicación el script orquetador para con este reparar y crear las configuraciones y archivos que hagan falta.
+
+3. **Configuración del Cron**
+
+#### Automatización con Cron (Programación de Tareas)
+
+Si no quieres ejecutar el script manualmente cada vez, puedes usar **Cron**. Cron es un administrador de tareas que funciona en segundo plano en Linux; es como una "alarma" que le dice a tu computadora: *"A tal hora, ejecuta este programa"*.
+
+### A. ¿Dónde se configura?
+
+No se escribe en cualquier parte. Para configurar las alarmas, se debe abrir un archivo especial de configuración llamado **Crontab**.
+
+1. Abre una terminal.
+2. Escribe el comando: `crontab -e`
+3. Si es la primera vez, te preguntará qué editor usar (Por ejemplo **Nano**, que suele ser la opción 1).
+4. Baja hasta el **final del archivo** y pega tu línea de programación.
+
+Tienes toda la razón. Esa explicación comete un error común en la documentación técnica: lanza un símbolo (la barra `/`) sin explicar su función, lo que genera confusión.
+
+En `cron`, existen **operadores** que modifican cómo se comportan los números. Aquí tienes una versión mejorada, mucho más clara y pedagógica, que explica el "porqué" de cada símbolo.
+
+---
+
+### B. ¿Cómo se escribe una tarea? (Versión Mejorada)
+
+El Crontab utiliza 5 columnas (las "estrellas") para definir el tiempo. Imagina que cada estrella es un filtro que el reloj debe pasar para que el script se ejecute:
+
+```cron
+# ┌───────────── Minuto (0 - 59)
+# │ ┌─────────── Hora (0 - 23)
+# │ │ ┌───────── Día del mes (1 - 31)
+# │ │ │ ┌─────── Mes (1 - 12)
+# │ │ │ │ ┌───── Día de la semana (0 - 6, 0 es domingo)
+# │ │ │ │ │
+# * * * * * /ruta/al/script.sh
+
+```
+
+#### Los 3 Operadores clave que debes conocer:
+
+1. **El Asterisco (`*`)**: Significa **"todos"**. Si lo pones en la columna de minutos, se ejecutará cada minuto de esa hora.
+2. **La Coma (`,`)**: Sirve para hacer **listas**. Por ejemplo, `15,45` en la columna de minutos significa: "ejecutar solo en el minuto 15 y en el 45".
+3. **La Barra (`/`)**: Se usa para definir **intervalos o pasos**. Es el "cada X tiempo".
+* `*/15` significa: "Toma el rango completo (0-59) y ejecútalo cada 15 pasos". Es decir: 0, 15, 30 y 45.
+
+#### Ejemplos prácticos explicados:
+
+* **`*/15 * * * *` (Cada 15 minutos)**
+* La barra `/` le dice a Cron que no quieres "todos" los minutos, sino saltar de 15 en 15. Es ideal para tu orquestador de backups porque revisa tareas frecuentemente sin saturar el sistema.
+
+
+* **`0 * * * *` (Al inicio de cada hora)**
+* Aquí no hay barra. Al poner un `0` fijo, le dices: "Espera a que el reloj marque exactamente el minuto 0 de cualquier hora". (Ej: 13:00, 14:00, 15:00).
+
+
+* **`0 2,14 * * *` (Dos veces al día)**
+* Usamos la **coma** para definir horas específicas: las 2:00 AM y las 2:00 PM (14:00).
+
+
+* **`30 2 * * *` (A una hora fija)**
+* Se ejecuta todos los días a las 2:30 AM exactamente. Es el formato clásico para backups pesados que quieres que ocurran cuando no estás usando la PC.
+
+---
+
+### C. La lógica: El "Reloj" vs. la "Frecuencia"
+
+Es vital entender que el Cron y tu archivo de configuración de las taraes `.conf`, ambas trabajan juntos, pero tienen funciones distintas:
+
+1. **Cron es el "Despertador":** Solo decide cada cuánto tiempo el script "abre los ojos" para mirar si hay trabajo.
+2. **El `.conf` es la "Agenda":** Contiene la frecuencia real de tus backups (ej. cada 1 hora, cada 1 día).
+
+**Escenarios de ejemplo:**
+
+* **Caso 1: Cron cada 15 min | Config con tarea que se realiza cada 1 hora (3600s).**
+El script despertará 4 veces. En las primeras 3 verá que "aún no toca" y se cerrará solo. En la cuarta, verá que ya pasó la hora y hará el backup. **(Configuración Ideal)**.
+* **Caso 2: Cron cada 1 hora | Config cada con tareas que se realiza cada 15 min (900s).**
+El script solo despertará una vez por hora. Aunque tú querías backups cada 15 minutos, el script "estuvo dormido" y se perdió las oportunidades anteriores. **(Configuración Incorrecta)**.
+
+---
+
+### D. Recomendación para el uso del Cron
+
+Para un equilibrio simple, configura tu Cron en `*/15 * * * * /ruta/al/script.sh`
+
+Esto permite que el sistema revise tareas frecuentemente sin consumir recursos innecesarios. Si tienes backups muy pesados o carpetas con muchos archivos, este margen de 15 minutos le da tiempo al script para validar permisos y espacio en disco antes de que Borg inicie la transferencia.
+
+
+---
+
+## Estado de Calidad y QA
+El proyecto es sometido a pruebas de estrés y funcionalidad. Según el protocolo más reciente:
+* **Resultado Global:** 34/50 puntos aprobados.
+* **UX/TUI:** 85% de cumplimiento (Estable).
+* **Lógica de Respaldo:** En proceso de mejora (56% de tests críticos pasados).
+
+Puedes revisar el detalle completo de los hallazgos en el archivo `2026-01-19.md` dentro del directorio de Tests.
+
+
+---
+
+## Licencia
+
+Este proyecto está bajo la **Licencia MIT**. Consulta el archivo [LICENSE](LICENSE) para más detalles.
+
+&copy; 2026 **Santiago (kaindev)** - [github.com/kaindev-lab](https://github.com/kaindev-lab)
+
+---

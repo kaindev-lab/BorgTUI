@@ -1,0 +1,3 @@
+Ideas para la proximas Versión:
+
+- **Multiples Repositorios:** Añadir un nuevo campo en las tareas para especificar el repositorio objetivo y así poder manejar multiples repositorios, que pueden por si mismos tener o no tener encriptación, ser o no ser locales. Esto potencia enormemente el sistema, lo hace más flexible y da la posibilidad de manejar multiples repositorios, tener o no tener encriptaciónd e los datos, segun la configuraciónd el repositorio objetivo y permite manejar repositorios tanto locales como externos.

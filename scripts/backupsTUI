@@ -1,0 +1,407 @@
+#!/bin/bash
+
+# =============================================================================
+# VARIABLES GLOBALES Y RUTAS XDG
+# =============================================================================
+# Rutas Estándar (Coincidentes con el Orquestador)
+LOG_DIR="$HOME/.cache/backups_manager"
+LOG_FILE="$LOG_DIR/backups.log"
+CONFIG_DIR="$HOME/.config/backups_manager"
+CONFIG_FILE="$CONFIG_DIR/backups.conf"
+STATE_DIR="$HOME/.local/share/backups_manager"
+STATE_FILE="$STATE_DIR/backups.state"
+
+# Rutas Específicas del Panel TUI
+TUI_CONFIG_FILE="$CONFIG_DIR/backupsTUI.conf"
+
+# Variables de Control
+ORCHESTRATOR_PATH=""
+LOG_VIEWER=""
+
+# =============================================================================
+# FUNCIONES DE UTILIDAD Y LOGS
+# =============================================================================
+
+# Función mejorada para aceptar niveles de log 
+log_tui_action() {
+    local nivel=${1:-INFO} # Si no se pasa argumento, es INFO
+    local mensaje=$2
+    local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
+    
+    # Mapeo de colores para consistencia visual si se ejecuta en terminal directa
+    local color=""
+    case $nivel in
+        "INFO") color="\e[32m" ;;
+        "WARN") color="\e[33m" ;;
+        "ERROR"|"CRITIC") color="\e[31m" ;;
+        *) color="\e[0m" ;;
+    esac
+
+    # Registro en archivo (Sin códigos de color para limpieza)
+    echo "[$timestamp] [$nivel] [TUI_PANEL] : $mensaje" >> "$LOG_FILE"
+}
+
+get_conf_value() {
+    local file=$1
+    local key=$2
+    if [ -f "$file" ]; then
+        grep "^$key =" "$file" | cut -d'=' -f2- | sed 's/^[[:space:]]*//; s/[[:space:]]*$//' | tr -d '"'
+    fi
+}
+
+pause_screen() {
+    echo ""
+    read -p "Presione [Enter] para continuar..."
+}
+
+# =============================================================================
+# FASE 1: VALIDACIÓN DE ENTORNO Y DEPENDENCIAS
+# =============================================================================
+
+# 1. Validación de whiptail (Motor Gráfico)
+if ! command -v whiptail &> /dev/null; then
+    echo "ERROR CRÍTICO: 'whiptail' no está instalado."
+    exit 1
+fi
+
+# 2. Listas de validación (Sincronizadas con Orchestrator) 
+DEPS_CRITICAS=("borg" "mkdir" "touch" "rm" "stat" "df" "du" "nice" "date" "zip" "ps" "grep" "sed" "awk" "cut" "tr" "nano")
+FALTANTES_CRITICAS=()
+FALTANTES_OPCIONALES=()
+REPORT_MSG=""
+
+# 3. Escaneo de dependencias críticas
+for dep in "${DEPS_CRITICAS[@]}"; do
+    if ! command -v "$dep" &> /dev/null; then
+        FALTANTES_CRITICAS+=("$dep")
+    fi
+done
+
+# 4. Escaneo de visor de logs y opcionales
+if command -v lnav &> /dev/null; then
+    LOG_VIEWER="lnav"
+elif command -v tail &> /dev/null; then
+    LOG_VIEWER="tail -f"
+    FALTANTES_OPCIONALES+=("lnav (Recomendado para visualización avanzada de logs)")
+else
+    # Si falta tail, es crítico para la opción 1
+    FALTANTES_CRITICAS+=("visor de logs (lnav o tail)")
+fi
+
+if ! command -v "notify-send" &> /dev/null; then
+    FALTANTES_OPCIONALES+=("notify-send (Sin notificaciones de escritorio)")
+fi
+
+# 5. CONSTRUCCIÓN DEL REPORTE UNIFICADO
+if [ ${#FALTANTES_CRITICAS[@]} -ne 0 ] || [ ${#FALTANTES_OPCIONALES[@]} -ne 0 ]; then
+    
+    # Bloque de Críticas
+    if [ ${#FALTANTES_CRITICAS[@]} -ne 0 ]; then
+        REPORT_MSG="❌ DEPENDENCIAS CRÍTICAS FALTANTES:\n"
+        for dep in "${FALTANTES_CRITICAS[@]}"; do REPORT_MSG+="  • $dep\n"; done
+        REPORT_MSG+="\nEl sistema NO puede iniciar sin estas herramientas.\n"
+    fi
+
+    # Bloque de Opcionales
+    if [ ${#FALTANTES_OPCIONALES[@]} -ne 0 ]; then
+        [ -n "$REPORT_MSG" ] && REPORT_MSG+="\n------------------------------------------------\n\n"
+        REPORT_MSG+="⚠️  AVISOS / MEJORAS OPCIONALES:\n"
+        for opt in "${FALTANTES_OPCIONALES[@]}"; do REPORT_MSG+="  • $opt\n"; done
+    fi
+
+    # Mostrar reporte y registrar en log con el nivel adecuado [cite: 7]
+    if [ ${#FALTANTES_CRITICAS[@]} -ne 0 ]; then
+        whiptail --title "Reporte de Dependencias - ERROR" --msgbox "$REPORT_MSG" 18 70
+        log_tui_action "CRITIC" "Fallo de dependencias críticas: ${FALTANTES_CRITICAS[*]}"
+        exit 1
+    else
+        whiptail --title "Reporte de Dependencias - AVISO" --msgbox "$REPORT_MSG" 15 70
+        log_tui_action "WARN" "Iniciando con advertencias opcionales: ${FALTANTES_OPCIONALES[*]}"
+    fi
+fi
+
+# 6. Creación de directorios base
+mkdir -p "$CONFIG_DIR" "$LOG_DIR" "$STATE_DIR"
+
+# =============================================================================
+# FASE 2: CONFIGURACIÓN INICIAL Y BOOTSTRAP
+# =============================================================================
+
+configure_orchestrator() {
+    # Función bucle para solicitar ruta hasta que sea válida o se cancele [cite: 5]
+    while true; do
+        local input_path
+        input_path=$(whiptail --title "Ubicación del Orquestador" \
+                              --inputbox "Ingrese la ruta completa de 'backups.sh':" 10 60 \
+                              "$HOME/.local/bin/backups.sh" 3>&1 1>&2 2>&3)
+        
+        if [ $? != 0 ]; then
+            return 1 # Cancelado
+        fi
+
+        if [ -f "$input_path" ]; then
+            echo "orchestrator_path = $input_path" > "$TUI_CONFIG_FILE"
+            chmod +x "$input_path"
+            ORCHESTRATOR_PATH="$input_path"
+            return 0 # Éxito
+        else
+            whiptail --title "Error" --msgbox "El archivo no existe en:\n$input_path\n\nIntente nuevamente." 10 60
+        fi
+    done
+}
+
+# Lógica de carga de configuración
+if [ ! -f "$TUI_CONFIG_FILE" ]; then
+    # --- PRIMER INICIO ---
+    whiptail --title "Configuración Inicial" --msgbox "Bienvenido.\nSe requiere configurar la ruta del Script Orquestador." 10 60
+    
+    if ! configure_orchestrator; then
+        echo "Configuración cancelada."
+        exit 1
+    fi
+
+    log_tui_action "INFO" "Configuración inicial creada. Ejecutando Bootstrap."
+    
+    # Ejecución aislada del Bootstrap
+    clear
+    stty sane
+    ( exec bash "$ORCHESTRATOR_PATH" )
+    pause_screen
+
+else
+    # --- CARGA NORMAL ---
+    ORCHESTRATOR_PATH=$(get_conf_value "$TUI_CONFIG_FILE" "orchestrator_path")
+    
+    # Validación robusta de la ruta guardada [cite: 5]
+    if [ ! -f "$ORCHESTRATOR_PATH" ]; then
+        if whiptail --title "Error de Configuración" --yesno "La ruta guardada no es válida:\n$ORCHESTRATOR_PATH\n\n¿Desea reconfigurarla ahora?" 12 70; then
+            if ! configure_orchestrator; then
+                exit 1
+            fi
+        else
+            echo "Error crítico: Orquestador no encontrado."
+            exit 1
+        fi
+    fi
+fi
+
+# =============================================================================
+# FASE 3: LÓGICA DE INTERFAZ Y MENÚ PRINCIPAL
+# =============================================================================
+
+log_tui_action "INFO" "Sesión de panel iniciada."
+
+while true; do
+    # 1. Recopilar Estadísticas
+    if [ -f "$STATE_FILE" ]; then
+        TOTAL_TAREAS=$(grep -cE "^\[[1-9][0-9]{2,}\]" "$STATE_FILE")
+        PENDIENTES=$(grep -c "estado = PENDIENTE" "$STATE_FILE")
+        EN_PROCESO=$(grep -c "estado = EN-PROCESO" "$STATE_FILE")
+        REALIZADOS=$(grep -c "estado = REALIZADO" "$STATE_FILE")
+        LAST_LOG=$(tail -n 1 "$LOG_FILE" | cut -c 1-70)
+    else
+        TOTAL_TAREAS="0"
+        PENDIENTES="?"
+        EN_PROCESO="?"
+        REALIZADOS="?"
+        LAST_LOG="Sin registros."
+    fi
+
+    # 2. Construir Dashboard (Incluyendo firma al final)
+    DASHBOARD_TEXT="Estado de los Backups:\n"
+    DASHBOARD_TEXT+="--------------------------------\n"
+    DASHBOARD_TEXT+="Tareas Totales : $TOTAL_TAREAS\n"
+    DASHBOARD_TEXT+="En Proceso     : $EN_PROCESO\n"
+    DASHBOARD_TEXT+="Pendientes     : $PENDIENTES\n"
+    DASHBOARD_TEXT+="Realizados     : $REALIZADOS\n"
+    DASHBOARD_TEXT+="--------------------------------\n"
+    DASHBOARD_TEXT+="Gestor by kaindev | Powered by BorgBackups"
+
+    # 3. Menú Principal (Ajustado alto a 23 y items visibles a 7)
+    OPTION=$(whiptail --title "Gestor Automatizado de Backups" \
+                      --menu "$DASHBOARD_TEXT" 23 78 7 \
+                      "1" "Visualizar Registros (Logs)" \
+                      "2" "Estado de las tareas (Backups)" \
+                      "3" "Estado del Repositorio" \
+                      "4" "Configurar Tareas (.conf)" \
+                      "5" "Ejecución Manual (Forzar Backups)" \
+                      "6" "Créditos e Información" \
+                      "0" "Salir" 3>&1 1>&2 2>&3)
+
+    if [ $? != 0 ]; then OPTION="0"; fi
+
+    case $OPTION in
+        1)
+            # --- VISUALIZAR LOGS ---
+            log_tui_action "INFO" "Usuario visualizando logs con $LOG_VIEWER."
+            clear
+            echo "Cargando logs..."
+            if [ "$LOG_VIEWER" == "lnav" ]; then
+                lnav "$LOG_FILE"
+            else
+                echo "Presione Ctrl+C para salir."
+                # Corrección del Trap y Subshell para evitar herencia de señales
+                ( trap 'kill $!' INT; tail -f "$LOG_FILE" & wait )
+            fi
+            ;;
+
+        2)
+            # --- ESTADO DETALLADO ---
+            log_tui_action "INFO" "Usuario consultando tabla de estados."
+            if [ ! -f "$STATE_FILE" ]; then
+                whiptail --msgbox "El archivo de estado aún no existe.\nEjecute un backup primero." 10 60
+            else
+                STATE_INFO=$(awk -F' = ' '
+                    # Función para convertir segundos a formato humano (2 unidades consecutivas)
+                    function formatear_tiempo(s) {
+                        if (s < 0) s = -s;
+                        if (s == 0) return "0";
+                        
+                        if (s <= 60) return s " seg";
+                        
+                        if (s <= 3600) { # Minutos + Segundos
+                            m = int(s / 60); seg = s % 60;
+                            return m " min " seg " seg";
+                        }
+                        if (s <= 86400) { # Horas + Minutos
+                            h = int(s / 3600); m = int((s % 3600) / 60);
+                            return h " h " m " min";
+                        }
+                        if (s <= 604800) { # Semanas + Días
+                            d = int(s / 86400); h = int((s % 86400) / 3600);
+                            return d " d " h " h";
+                        }
+                        if (s <= 2592000) { # Semanas + Días
+                            sem = int(s / 604800); d = int((s % 604800) / 86400);
+                            return sem " sem " d " d";
+                        }
+                        # Meses + Semanas
+                        mes = int(s / 2592000); sem = int((s % 2592000) / 604800);
+                        return mes " mes " sem " sem";
+                    }
+
+                    /^\[/ { id=$0; gsub(/\[|\]/, "", id); next }
+                    /^categoria/ { cat=$2 }
+                    /^estado/ { st=$2 }
+                    /^tiempo_faltante/ { fl=$2 }
+                    /^ultimo_exito/ { 
+                        ue=$2; 
+                        if(ue=="0" || ue=="") date="NUNCA"; 
+                        else { cmd="date -d @"ue" \"+%y-%m-%d %H:%M\""; cmd | getline date; close(cmd) }
+                    }
+                    /^$/ { 
+                        if (id != "100" && id != "") {
+                            # Lógica de columnas según el valor de "fl" (tiempo_faltante)
+                            if (fl > 0) {
+                                proximo = formatear_tiempo(fl);
+                                atraso = "0";
+                            } else {
+                                proximo = "0";
+                                atraso = formatear_tiempo(fl);
+                            }
+
+                            printf "ID %-3s | %-18.18s | %-10.10s | %-14s | %-15s | %-15s\n", id, cat, st, date, proximo, atraso
+                        }
+                        # Limpiar variables para la siguiente sección
+                        fl=0; cat=""; st=""; ue=""; date="";
+                    }
+                ' "$STATE_FILE")
+
+                # Ajustamos el ancho a 115 para dar cabida a las nuevas columnas
+                whiptail --title "Detalle de Tareas" --scrolltext --msgbox \
+"ID     | Categoría          | Estado     | Último Éxito   | Próximo Backup  | Atraso         
+----------------------------------------------------------------------------------------
+$STATE_INFO" 25 100
+            fi
+            ;;
+
+        3)
+            # --- INFO REPOSITORIO ---
+            log_tui_action "INFO" "Usuario consultando info del repositorio."
+            
+            # Obtener ruta repo (Parsea ID 100)
+            REPO_PATH=$(sed -n '/^\[100\]/,/^\[/p' "$CONFIG_FILE" 2>/dev/null | grep "^rutas =" | cut -d'=' -f2- | sed 's/^[[:space:]]*//; s/[[:space:]]*$//' | tr -d '"' | sed "s|~|$HOME|")
+
+            if [ -d "$REPO_PATH" ]; then
+                whiptail --infobox "Consultando Borg... Espere." 5 50
+                # Capturamos STDERR también para ver errores de borg
+                BORG_INFO=$(borg info "$REPO_PATH" 2>&1)
+                # Eliminado el tail -n 10 para mostrar todo el historial [cite: 9]
+                BORG_LIST=$(borg list "$REPO_PATH" 2>&1) 
+                
+		MSG="=== INFORMACIÓN GENERAL ===\n$BORG_INFO\n\n=== LISTADO DE BACKUPS (Puede desplazarse hacia abajo (↓) para más información) ===\n\n$BORG_LIST"
+                
+                echo -e "$MSG" > /tmp/borg_tui_info.txt
+                whiptail --title "Estado del Repositorio" --textbox /tmp/borg_tui_info.txt 30 120 --scrolltext
+                rm /tmp/borg_tui_info.txt
+            else
+                whiptail --title "Error" --msgbox "No se encuentra el repositorio en:\n${REPO_PATH:-'No definido'}" 10 60
+            fi
+            ;;
+
+        4)
+            # --- CONFIGURAR ---
+            log_tui_action "INFO" "Usuario editando configuración."
+            ${EDITOR:-nano} "$CONFIG_FILE"
+            
+            if (whiptail --title "Sincronizar" --yesno "¿Desea aplicar los cambios ahora?" 10 60); then
+                log_tui_action "INFO" "Sincronización manual solicitada."
+                clear
+                stty sane
+                ( exec bash "$ORCHESTRATOR_PATH" ) # Ejecución aislada
+                pause_screen
+            fi
+            ;;
+
+        5)
+            # --- EJECUCIÓN MANUAL (SOLUCIÓN CRÍTICA BUCLE 11) --- 
+            if (whiptail --title "Confirmación" --yesno "¿Ejecutar orquestador ahora?" 10 60); then
+                log_tui_action "INFO" "Ejecución manual forzada."
+                
+                # 1. Limpiamos la pantalla visualmente
+                clear
+                
+                # 2. Reseteamos los parámetros de la terminal (TTY)
+                # Esto elimina la configuración "raw" que deja whiptail
+                stty sane
+                
+                echo "Ejecutando Backup Manager..."
+                echo "----------------------------"
+                
+                # 3. EJECUCIÓN AISLADA EN SUBSHELL
+                # Usamos ( exec ... ) para crear un proceso nuevo limpio
+                # que no comparta los descriptores de archivo contaminados del padre.
+                ( exec bash "$ORCHESTRATOR_PATH" )
+                
+                echo "----------------------------"
+                echo "Proceso finalizado."
+                
+                # Pausa para que el usuario lea antes de que whiptail retome el control
+                pause_screen
+            fi
+            ;;
+
+	6)
+            # --- CRÉDITOS E INFORMACIÓN ---
+            log_tui_action "INFO" "Usuario visualizando créditos."
+            INFO="SISTEMA DE GESTIÓN DE BACKUPS\n"
+            INFO+="----------------------------------------------\n\n"
+            INFO+="Desarrollado por: kaindev\n"
+            INFO+="Motor de Backups: BorgBackups\n"
+            INFO+="Sitio Web Borg: https://www.borgbackup.org\n\n"
+            INFO+="Este proyecto busca mejorar la orquestación\n"
+            INFO+="de copias de seguridad automáticas simples y seguras.\n\n"
+            INFO+="GitHub: https://github.com/kaindev-lab/BorgTUI\n"
+            INFO+="Versión: 1.0.0 (2026)"
+            
+            whiptail --title "Acerca del Proyecto" --msgbox "$INFO" 18 65
+            ;;
+
+        0)
+            log_tui_action "INFO" "Salida del panel."
+            clear
+            printf "\nGracias por usar BorgTUI.\n\n"
+            exit 0
+            ;;
+    esac
+done

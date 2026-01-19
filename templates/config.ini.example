@@ -1,0 +1,36 @@
+# =============================================================================
+# AUTO-BORGBACKUPS-TUI: CONFIGURATION TEMPLATE (REFERENCE)
+# =============================================================================
+# Use this file as a guide to configure your own backup IDs.
+# Frecuencia is in seconds (e.g., 3600 = 1 hour).
+# Rutas must be absolute paths or use the ~ shortcut.
+# =============================================================================
+
+[102]
+categoria = Critical_Source_Code
+frecuencia = 900
+rutas = ~/projects/active_work ~/data/databases
+retencion = --keep-last 4 --keep-daily 7
+compression = lz4
+
+[103]
+categoria = Daily_Documents
+frecuencia = 86400
+rutas = ~/documents/personal ~/documents/work
+retencion = --keep-daily 14 --keep-weekly 4
+compression = zstd,3
+
+[104]
+categoria = Media_Assets
+frecuencia = 604800
+rutas = ~/media/photos ~/media/videos
+retencion = --keep-weekly 4 --keep-monthly 6
+compression = False
+
+[105]
+categoria = System_Configs
+frecuencia = 86400
+rutas = ~/.config ~/.local/bin
+retencion = --keep-daily 7
+compression = lz4
+

@@ -1,0 +1,844 @@
+#!/bin/bash
+
+# =============================================================================
+# VARIABLES GLOBALES Y RUTAS XDG
+# =============================================================================
+LOG_DIR="$HOME/.cache/backups_manager"
+LOG_FILE="$LOG_DIR/backups.log"
+CONFIG_DIR="$HOME/.config/backups_manager"
+CONFIG_FILE="$CONFIG_DIR/backups.conf"
+STATE_DIR="$HOME/.local/share/backups_manager"
+STATE_FILE="$STATE_DIR/backups.state"
+LOCKFILE="/run/user/$(id -u)/backups_manager.lock"
+
+
+# =============================================================================
+# FUNCIONES UTILES
+# =============================================================================
+
+# Función para expandir las rutas como se haría en la terminal
+get_expanded_paths() {
+   local file="$1"
+    local id="$2"
+    local raw_val
+    local paths_array
+    local final_paths=""
+
+    # 1. Extraer la línea cruda (manejando el ID y eliminando basura \r)
+    raw_val=$(sed -n "/^\[$id\]/,/^\[/p" "$file" | grep "^rutas =" | cut -d'=' -f2-)
+
+    # 2. Usamos eval para que Bash interprete las comillas del archivo .conf
+    # Esto expande las rutas correctamente dentro de un array
+    eval "paths_array=($raw_val)" 2>/dev/null
+
+    # 3. Construir la cadena de salida expandiendo la tilde ~
+    for p in "${paths_array[@]}"; do
+        # Expansión manual de ~ a $HOME
+        local expanded_p="${p/#\~/$HOME}"
+        # Concatenamos encerrando entre comillas cada ruta
+        final_paths+="\"$expanded_p\" "
+    done
+
+    # Devolvemos la cadena quitando el espacio final
+    # También se elimina los '/' al final de las cadenas
+    echo "${final_paths% }" | sed 's|/"|"|'
+}
+
+# 2. Verificación de Acceso a la interfaz grafica.
+HAS_NOTIFY=false # programa para notificaiones.
+HAS_DISPLAY=false # intefaz grafica disponible.
+[ -x "$(command -v notify-send)" ] && HAS_NOTIFY=true
+[[ -n "$DISPLAY" || -n "$WAYLAND_DISPLAY" ]] && HAS_DISPLAY=true
+
+# FUNCIÓN DE INFORMACIÓN UNIFICADA
+log_msg() {
+    local nivel=$1    # INFO, WARN, ERROR, CRITIC
+    local contexto=$2 # SYSTEM, ID_100, etc.
+    local mensaje=$3
+    local forzar=$4   # true/false
+    local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
+    local linea="[$timestamp] [$nivel] [$contexto] : $mensaje"
+
+    # Colores para Terminal
+    local color="\e[0m"
+    case $nivel in
+        "INFO")   color="\e[32m" ;; # Verde
+        "WARN")   color="\e[33m" ;; # Amarillo
+        "ERROR"|"CRITIC") color="\e[31m" ;; # Rojo
+    esac
+
+    # 1. Terminal e Informe
+    echo -e "${color}${linea}\e[0m"
+    echo "$linea" >> "$LOG_FILE"
+
+# Desabilito als notificaciones vsuales mientras depuro el script.
+#    # 2. Notificación Visual
+#    if [[ "$HAS_NOTIFY" == true && "$HAS_DISPLAY" == true ]]; then
+#        if [[ "$nivel" == "ERROR" || "$nivel" == "CRITIC" || "$forzar" == "true" ]]; then
+#            notify-send -u critical "Borg Manager - $nivel - $contexto" "$mensaje"
+#        fi
+#    elif [[ "$nivel" == "ERROR" || "$nivel" == "CRITIC" ]]; then
+#         # LOG-LEVEL: WARN si se esperaba notificar pero no hay medios
+#         echo "[$timestamp] [WARN] [SYSTEM] : Notificación visual omitida (Sin interfaz o notify-send)." >> "$LOG_FILE"
+#    fi
+}
+
+
+# =============================================================================
+# NOTA PARA EVITAR PROBLEMAS FUTUROS: MANEJO DE RUTAS DE .STATE
+#
+# Todas las rutas que se procesan con la función get_expanded_paths,
+# siempre son guardadas entre comillas, sea una o varias por ID.
+# Tened esto en cuenta para los susos futuros y evitar dolores de cabeza.
+# =============================================================================
+
+
+# =============================================================================
+# FASE 1: CONFIGURACIÓN Y VALIDACIONES CRITICAS
+#
+# Asegurar las condiciones inciales adecuadas para un fucnionamiento adecuado.
+# =============================================================================
+
+
+# =============================================================================
+# NIVEL -1: INICIALIZACIÓN DE CANALES
+# =============================================================================
+
+# 1. Validación de Logs
+if [ ! -d "$LOG_DIR" ]; then
+    mkdir -p "$LOG_DIR" || { echo "CRITICAL: No se pudo crear el directorio de logs."; exit 1; }
+fi
+
+if [ ! -f "$LOG_FILE" ]; then
+    touch "$LOG_FILE" || { echo "CRITICAL: No se pudo crear el archivo de logs."; exit 1; }
+    # Iniciamos con un mensaje en terminal ya que log_msg no está definida
+    echo "$(date '+%Y-%m-%d %H:%M:%S') [WARN] [SYSTEM] : Inicio de nueva bitácora." >> "$LOG_FILE"
+fi
+
+if [ ! -w "$LOG_FILE" ]; then
+    echo "CRITICAL: El archivo de logs no tiene permisos de escritura."; exit 1
+fi
+
+log_msg "INFO" "SYSTEM" "Canales de comunicación inicializados correctamente."
+
+# =============================================================================
+# NIVEL 0: CONTROL DE INSTANCIA ÚNICA
+# =============================================================================
+
+# 1. La Trampa de Limpieza (Elimina el archivo de bloqueo)
+trap 'log_msg "INFO" "SYSTEM" "Cerrando script: Limpiando recursos..."; rm -f "$LOCKFILE";exit' EXIT SIGINT SIGTERM
+
+# 2. Validación de Existencia
+log_msg "INFO" "SYSTEM" "Validando instancia única..."
+if [ -f "$LOCKFILE" ]; then
+    OLD_PID=$(cat "$LOCKFILE")
+    if ps -p "$OLD_PID" > /dev/null; then
+        log_msg "CRITIC" "SYSTEM" "Instancia duplicada detectada (PID: $OLD_PID). Abortando ejecución."
+        exit 1
+    else
+        log_msg "INFO" "SYSTEM" "Lockfile huérfano detectado (PID antiguo: $OLD_PID). Limpiando..."
+        rm -f "$LOCKFILE"
+    fi
+fi
+
+# 3. Creación de Bloqueo
+echo $$ > "$LOCKFILE"
+log_msg "INFO" "SYSTEM" "Instancia validada. Lockfile creado (PID: $$)."
+
+# =============================================================================
+# NIVEL 1: ACCESO A ARCHIVOS DE CONTROL (XDG)
+# =============================================================================
+
+# 1. Estructura de Directorios
+mkdir -p "$CONFIG_DIR" "$STATE_DIR"
+
+# 2. Archivo de Configuración
+if [ ! -f "$CONFIG_FILE" ]; then
+    cat <<EOF > "$CONFIG_FILE"
+# =============================================================================
+#            CONFIGURACIÓN DEL GESTOR DE BACKUPS (BORG_MANAGER)
+# =============================================================================
+# Este archivo define DÓNDE, CUÁNDO y QUÉ respaldar.
+#
+# TABLA DE REFERENCIA DE TIEMPO (Frecuencia en segundos):
+# -----------------------------------------------------------------------------
+# 15 Minutos = 900          | 1 Día (24h)  = 86400
+# 1 Hora     = 3600         | 1 Semana     = 604800
+# 6 Horas    = 21600        | 1 Mes        = 2592000
+# -----------------------------------------------------------------------------
+
+# =============================================================================
+# SECCIÓN 1: CONFIGURACIÓN DEL SISTEMA (IDs 100 y 101)
+# =============================================================================
+
+[100]
+categoria = Repositorio Principal de Datos
+# El destino físico donde se almacenarán todas las copias de seguridad.
+# Si la carpeta no existe, el script intentará crearla.
+rutas = ~/Backups/Borg-Backups/Repository
+encryption = none
+
+[101]
+categoria = Historial y Rotación de Logs
+# Frecuencia: Cada cuánto tiempo comprimir el log actual (Ej: 2592000 = 1 mes).
+frecuencia = 2592000
+# Retención: Cuántos archivos .zip históricos conservar en la carpeta de logs.
+retencion = 12
+# Ruta: Carpeta donde se guardarán los .zip (Si se deja vacío, el log se limpia pero no se guarda).
+rutas = ~/Backups/Borg-Backups/Logs
+
+# =============================================================================
+# SECCIÓN 2: TAREAS DE RESPALDO DE USUARIO (ID 102 en adelante)
+# =============================================================================
+# INSTRUCCIONES:
+# 1. ID: Debe ser único y empezar en 102.
+# 2. RUTAS: Separadas por espacios. 
+#    - Usa comillas para nombres con espacios: "/home/user/Mi Carpeta"
+#    - El símbolo '~' funciona fuera de comillas: ~/Documentos
+# 3. COMPRESION: 'True' (usa zstd,6 - lento pero pequeño) o 'False' (rápido).
+# 4. RETENCION: Define qué CONSERVAR. Borg borrará lo que no coincida.
+#    --keep-last N    : Guarda los últimos N respaldos.
+#    --keep-daily N   : Guarda 1 respaldo al día de los últimos N días.
+#    --keep-weekly N  : Guarda 1 respaldo por semana de las últimas N semanas.
+#    --keep-monthly N : Guarda 1 respaldo por mes de los últimos N meses.
+#
+#    Ejemplo de combinación: --keep-last 5 --keep-daily 7 --keep-monthly 2
+# -----------------------------------------------------------------------------
+
+#[102]
+#categoria = Documentos y Proyectos
+#frecuencia = 3600
+#rutas = ~/Documents "/home/usuario/Proyectos Especiales"
+#retencion = --keep-last 5 --keep-daily 7
+#compression = True
+
+# >>> AÑADE TUS NUEVAS CATEGORÍAS A PARTIR DE AQUÍ <<<
+
+EOF
+    log_msg "WARN" "SYSTEM" "Archivo de configuración creado con plantilla. Edítelo antes de continuar." "true"
+else
+    if [ ! -r "$CONFIG_FILE" ]; then
+        log_msg "CRITIC" "SYSTEM" "No se puede leer el archivo de configuración en $CONFIG_FILE."
+        exit 1
+    fi
+    log_msg "INFO" "SYSTEM" "Archivo de configuración validado."
+fi
+
+# 3. Archivo de Estado
+if [ ! -f "$STATE_FILE" ]; then
+    echo "LAST_RUN=0" > "$STATE_FILE"
+    log_msg "INFO" "SYSTEM" "Archivo de estado inicializado."
+else
+    # Si el archivo existe, DEBEMOS validar que sea accesible
+    if [ ! -r "$STATE_FILE" ] || [ ! -w "$STATE_FILE" ]; then
+        log_msg "CRITIC" "SYSTEM" "No se puede leer el archivo de estado en $STATE_FILE."
+        exit 1
+    fi
+    log_msg "INFO" "SYSTEM" "Archivo de estado validado."
+fi
+
+# =============================================================================
+# NIVEL 2: DEPENDENCIAS (ESCANEO DE ENTORNO)
+# =============================================================================
+
+log_msg "INFO" "SYSTEM" "Escaneando dependencias..."
+
+# 1. Herramientas Críticas (Abortan el script)
+CRIT_DEPS=(
+    "borg" "mkdir" "touch" "rm" "stat" "df" "du"
+    "nice" "date" "zip" "ps" "grep" "sed" "awk"
+    "cut" "tr"
+)
+
+for dep in "${CRIT_DEPS[@]}"; do
+    if ! command -v "$dep" &> /dev/null; then
+        log_msg "CRITIC" "SYSTEM" "Dependencia crítica faltante: $dep. Abortando."
+        exit 1
+    fi
+done
+
+# 2. Herramientas Complementarias (Continúan con aviso)
+if ! command -v "notify-send" &> /dev/null; then
+    log_msg "WARN" "SYSTEM" "Herramienta opcional faltante: libnotify-bin." "true"
+    HAS_NOTIFY=false
+else
+    HAS_NOTIFY=true
+fi
+
+log_msg "INFO" "SYSTEM" "Entorno validado."
+
+# =============================================================================
+# NIVEL 3: INFRAESTRUCTURA DEL REPOSITORIO (ID 100)
+# =============================================================================
+
+# Limpiamos la ruta (quitamos comillas y expandimos ~)
+REPO_PATH=$(get_expanded_paths "$CONFIG_FILE" "100" | sed 's/\"//g')
+
+if [ -z "$REPO_PATH" ] || [ "$REPO_PATH" == "null" ]; then
+    log_msg "CRITIC" "ID_100" "La ruta del repositorio no está definida en el .conf"
+    exit 1
+fi
+
+# Intentar crear la ruta si no existe
+if [ ! -d "$REPO_PATH" ]; then
+    log_msg "WARN" "ID_100" "Ruta no encontrada. Intentando crear: $REPO_PATH"
+    if ! mkdir -p "$REPO_PATH" 2>/dev/null; then
+        log_msg "CRITIC" "ID_100" "ERROR FATAL: No se puede crear la ruta '$REPO_PATH'. Verifique permisos o disco montado."
+        exit 1
+    fi
+fi
+
+# Validación de permisos R/W/X
+if [ ! -r "$REPO_PATH" ] || [ ! -w "$REPO_PATH" ] || [ ! -x "$REPO_PATH" ]; then
+    log_msg "CRITIC" "ID_100" "Permisos insuficientes en el repositorio (rwx requeridos)."
+    exit 1
+fi
+
+log_msg "INFO" "ID_100" "Acceso físico validado en: $REPO_PATH"
+
+# --- Validación de Integridad Borg ---
+BORG_STATUS=$(borg info "$REPO_PATH" 2>&1)
+BORG_EXIT=$?
+
+if [ $BORG_EXIT -eq 0 ]; then
+    log_msg "INFO" "ID_100" "Repositorio Borg reconocido y válido."
+else
+    # Si el repo no existe o no es válido (Exit 2)
+    if [[ "$BORG_STATUS" == *"not a valid repository"* || "$BORG_STATUS" == *"does not exist"* ]]; then
+        if [ -z "$(ls -A "$REPO_PATH")" ]; then
+            log_msg "WARN" "ID_100" "Inicializando nuevo repositorio Borg..." "true"
+            borg init --encryption=none "$REPO_PATH" || { log_msg "CRITIC" "ID_100" "Error al inicializar."; exit 1; }
+        else
+            log_msg "CRITIC" "ID_100" "La carpeta no está vacía y no es un repositorio Borg válido."
+            exit 1
+        fi
+    else
+        log_msg "CRITIC" "ID_100" "Error de Borg (Exit $BORG_EXIT): $BORG_STATUS"
+        exit 1
+    fi
+fi
+
+# =============================================================================
+# NIVEL 4: VALIDACIÓN DE PARÁMETROS DE LOG (ID 101)
+# =============================================================================
+
+# 1. Extracción de valores directamente del archivo de configuración (.conf)
+# Buscamos los valores reales que el usuario escribió para sincronizarlos
+LOG_FREQ_RAW=$(grep -A 10 "\[101\]" "$CONFIG_FILE" | grep "^frecuencia =" | cut -d'=' -f2 | xargs)
+LOG_RET_RAW=$(grep -A 10 "\[101\]" "$CONFIG_FILE" | grep "^retencion =" | cut -d'=' -f2 | xargs)
+LOG_REPO_PATH=$(get_expanded_paths "$CONFIG_FILE" "101" | sed 's/\"//g')
+
+# 2. Validación de Integridad de los datos numéricos
+if [[ "$LOG_FREQ_RAW" =~ ^[0-9]+$ ]]; then
+    LOG_FREQ=$LOG_FREQ_RAW
+else
+    LOG_FREQ=2592000 # 1 mes por defecto
+    log_msg "WARN" "ID_101" "Frecuencia inválida en .conf. Usando valor de emergencia (1 mes)."
+fi
+
+if [[ "$LOG_RET_RAW" =~ ^[0-9]+$ ]]; then
+    LOG_RET=$LOG_RET_RAW
+else
+    LOG_RET=12 # 12 archivos por defecto
+    log_msg "WARN" "ID_101" "Retención inválida en .conf. Usando valor de emergencia (12u)."
+fi
+
+# 3. Validación de la Ruta de Históricos
+VALID_LOG_PATH=""
+if [ -z "$LOG_REPO_PATH" ] || [ "$LOG_REPO_PATH" == "null" ]; then
+    log_msg "WARN" "ID_101" "Ruta de históricos no definida. Se limpiarán logs sin respaldar."
+else
+    if [ ! -d "$LOG_REPO_PATH" ]; then
+        if mkdir -p "$LOG_REPO_PATH" 2>/dev/null; then
+            VALID_LOG_PATH="$LOG_REPO_PATH"
+            log_msg "INFO" "ID_101" "Directorio de históricos creado."
+        else
+            log_msg "WARN" "ID_101" "Ruta inválida o sin permisos ($LOG_REPO_PATH). No habrá respaldos." "true"
+        fi
+    else
+        if [ -w "$LOG_REPO_PATH" ]; then
+            VALID_LOG_PATH="$LOG_REPO_PATH"
+        else
+            log_msg "WARN" "ID_101" "Sin permisos de escritura en: $LOG_REPO_PATH" "true"
+        fi
+    fi
+fi
+
+# Informe Final de Validación para el ID 101
+log_msg "INFO" "ID_101" "Configuración Validada: Freq=${LOG_FREQ}s | Ret=${LOG_RET}u | Ruta=${VALID_LOG_PATH:-"NINGUNA"}"
+
+
+# =============================================================================
+# FASE 2: SINCRONIZACIÓN DE LAS CONFIGURACIONES Y ESTADOS DEL PROGRAMA
+# =============================================================================
+log_msg "INFO" "SYSTEM" "Iniciando sincronización de estados (Fase 2)..."
+
+TEMP_STATE=$(mktemp)
+AHORA=$(date +%s)
+# Captura todos los de 3 dígitos pero quita el 100 (repositorio), que no se necesita en los estados, pues no cambia durante la vida del script.
+IDS_CONFIGURADOS=$(grep -nP '^\[[1-9][0-9]{2,}\]' "$CONFIG_FILE" | grep -vE '\[100\]')
+IDS_PROCESADOS=()
+CONFIGS_PROCESADAS=()
+COUNT_SYNC=0
+
+# Extrae del .conf usando el número de línea para no mezclar bloques con mismo ID
+get_val_conf() {
+    local file=$1 linea=$2 key=$3
+    sed -n "${linea},/^\[/p" "$file" | grep "^$key =" | cut -d'=' -f2- | sed 's/#.*$//; s/^[[:space:]]*//; s/[[:space:]]*$//'
+}
+
+# Extrae del .state usando el ID (en el estado no hay duplicados)
+get_val_state() {
+    local file=$1 id=$2 key=$3
+    sed -n "/^\[$id\]/,/^\[/p" "$file" | grep "^$key =" | cut -d'=' -f2- | sed 's/#.*$//; s/^[[:space:]]*//; s/[[:space:]]*$//'
+}
+
+for SEC in $IDS_CONFIGURADOS; do
+    # Separamos el número de línea y el ID del formato "linea:[ID]"
+    L_START=$(echo "$SEC" | cut -d: -f1)
+    ID=$(echo "$SEC" | cut -d: -f2 | tr -d '[]')
+
+    # 1. EXTRACCIÓN DE DATOS
+    if [[ "$ID" == "101" ]]; then
+        CAT="Registros"; FREQ=$LOG_FREQ; RET=$LOG_RET; RUTAS="$VALID_LOG_PATH"; COMP=1
+    else
+        # 1. EXTRACCIÓN DE DATOS BÁSICOS
+        CAT=$(get_val_conf "$CONFIG_FILE" "$L_START" "categoria")
+        F_RAW=$(get_val_conf "$CONFIG_FILE" "$L_START" "frecuencia")
+        C_RAW=$(get_val_conf "$CONFIG_FILE" "$L_START" "compresion" | tr '[:upper:]' '[:lower:]')
+        R_RAW=$(get_val_conf "$CONFIG_FILE" "$L_START" "retencion")
+
+        if [[ "$F_RAW" =~ ^[0-9]+$ ]]; then
+            FREQ=$F_RAW
+        else
+            FREQ=86400  # Valor por defecto: 1 día si el usuario pone basura
+	    log_msg "WARN" "ID_$ID" "Frecuencia inválida ($F_RAW). Usando 86400s."
+	    log_msg "WARN" "ID_$ID" "Se usará la frecuencia de 86400s /(1 día)."
+        fi
+        
+        [[ "$C_RAW" == "true" ]] && COMP=0 || COMP=1
+        RET=${R_RAW:-"--keep-daily 7"}
+
+        # 2. PROCESAMIENTO DE RETENCIÓN
+        # Definimos las opciones permitidas por Borg Prune
+        POLITICAS_PERMITIDAS="--keep-last --keep-hourly --keep-daily --keep-weekly --keep-monthly --keep-yearly"
+        RET_VALIDA=""
+        
+        if [ -z "$R_RAW" ]; then
+            RET_VALIDA="--keep-daily 7" # Valor por defecto si está vacío
+            log_msg "WARN" "ID_$ID" "Retención no definida. Usando por defecto: --keep-daily 7"
+        else
+            # Convertimos la cadena en un array para analizar pares (comando valor)
+            read -ra TOKENS <<< "$R_RAW"
+            for ((i=0; i<${#TOKENS[@]}; i+=2)); do
+                CMD="${TOKENS[i]}"
+                VAL="${TOKENS[i+1]}"
+                
+                # 1. ¿Es un comando válido? 2. ¿El valor es un número?
+                if [[ " $POLITICAS_PERMITIDAS " =~ " $CMD " ]] && [[ "$VAL" =~ ^[0-9]+$ ]]; then
+                    RET_VALIDA+="$CMD $VAL "
+                else
+                    log_msg "WARN" "ID_$ID" "Política de retención inválida omitida: $CMD $VAL" "true"
+                fi
+            done
+            
+            # Si después de limpiar no quedó nada válido, aplicamos el fail-safe
+            if [ -z "$(echo "$RET_VALIDA" | xargs)" ]; then
+                RET_VALIDA="--keep-daily 7"
+                log_msg "WARN" "ID_$ID" "Sin políticas válidas. Aplicando fail-safe: --keep-daily 7" "true"
+            fi
+        fi
+        RET=$(echo "$RET_VALIDA" | xargs) # Limpieza de espacios extra
+
+        # 3. PROCESAMIENTO DE RUTAS
+        RUTAS=$(get_expanded_paths "$CONFIG_FILE" "$ID" "$L_START")
+
+        # --- VALIDACIÓN DE ACCESIBILIDAD PROFUNDA ---
+        RUTAS_EXISTENTES=""
+        
+        while IFS= read -r -d '' r; do
+            if [ -e "$r" ]; then
+                # 1. Comprobamos si la ruta base es legible
+                if [ -r "$r" ]; then
+                    # 2. VALIDACIÓN RECURSIVA: Buscamos elementos sin permiso de lectura
+                    # Limitamos a los primeros 5 errores para no saturar el log
+                    ERRORES_LECTURA=$(find "$r" ! -readable -print -quit 2>/dev/null)
+
+                    if [ -z "$ERRORES_LECTURA" ]; then
+                        RUTAS_EXISTENTES+=" \"$r\""
+                    else
+                        log_msg "WARN" "ID_$ID" "Acceso parcial: Se detectaron subcarpetas/archivos sin permiso en: $r" "true"
+                        # Opcional: Podrías decidir incluirla de todos modos o descartarla.
+                        # Para tests estrictos, mejor descartarla si no es 100% legible.
+                    fi
+                else
+                    log_msg "WARN" "ID_$ID" "Ruta base sin permisos de lectura: $r" "true"
+                fi
+            else
+                log_msg "WARN" "ID_$ID" "Ruta no encontrada: $r" "true"
+            fi
+        done < <(echo "$RUTAS" | xargs printf '%s\0')
+
+        RUTAS=$(echo "$RUTAS_EXISTENTES" | sed 's/^[[:space:]]*//')
+
+        # Si tras el filtro no quedó nada, omitimos este ID
+        [ -z "$RUTAS" ] && { log_msg "WARN" "ID_$ID" "Backup omitido: Ninguna ruta es accesible o existe." "true"; continue; }
+
+
+        # Informe Final de Validación para cada Tarea
+        log_msg "INFO" "ID_$ID" "Configuración Validada: Freq = ${FREQ}s | Retencion = ${RET} | Rutas = ${RUTAS:-"NINGUNA"}"
+
+    fi
+
+    # 3. GESTIÓN DE ID Y DETECCIÓN DE DUPLICADOS IDÉNTICOS
+    # Creamos una huella digital del contenido para comparar
+    HUELLA_ACTUAL="${CAT}|${FREQ}|${RET}|${RUTAS}|${COMP}"
+    
+    # Si el ID ya existe, verificamos si el contenido es idéntico
+    if [[ " ${IDS_PROCESADOS[@]} " =~ " ${ID} " ]]; then
+        ENCONTRADO_IGUAL=false
+        for CONFIG_PREVIA in "${CONFIGS_PROCESADAS[@]}"; do
+            if [[ "$CONFIG_PREVIA" == "${ID}:${HUELLA_ACTUAL}" ]]; then
+                ENCONTRADO_IGUAL=true
+                break
+            fi
+        done
+
+        if [ "$ENCONTRADO_IGUAL" = true ]; then
+            log_msg "WARN" "SYSTEM" "ID $ID duplicado con datos idénticos. Omitiendo duplicado." "true"
+            continue
+        fi
+
+        # Si el ID existe pero los datos son distintos, reasignamos ID
+        ULTIMO_ID=$(echo "${IDS_PROCESADOS[@]}" | tr ' ' '\n' | sort -n | tail -1)
+        FINAL_ID=$((ULTIMO_ID + 1))
+        log_msg "WARN" "SYSTEM" "ID $ID duplicado con datos distintos. Reasignando a $FINAL_ID." "true"
+    else
+        FINAL_ID=$ID
+    fi
+
+    # Guardamos el ID y su configuración para futuras comparaciones
+    IDS_PROCESADOS+=("$FINAL_ID")
+    CONFIGS_PROCESADAS+=("${ID}:${HUELLA_ACTUAL}")
+
+    # 4. SINCRONIZACIÓN CON EL ESTADO ANTERIOR (Con valores por defecto para IDs nuevos)
+    ULTIMO_E=$(get_val_state "$STATE_FILE" "$FINAL_ID" "ultimo_exito"); ULTIMO_E=${ULTIMO_E:-0}
+    ESTADO_E=$(get_val_state "$STATE_FILE" "$FINAL_ID" "estado"); ESTADO_E=${ESTADO_E:-"PENDIENTE"}
+    PID_E=$(get_val_state "$STATE_FILE" "$FINAL_ID" "pid"); PID_E=${PID_E:-0}
+
+    T_TRANS=$((AHORA - ULTIMO_E))
+    # Si nunca se ha ejecutado (0), el tiempo transcurrido debe ser 0
+    [ "$ULTIMO_E" -eq 0 ] && T_TRANS=0
+    T_FALTANTE=$((FREQ - T_TRANS))
+
+    # Ajuste de estado lógico
+    # Si la Tarea no esta en proceo, validamos y actualizamos su estado
+    # Si ya es tiempo de hacer un backup (T_FALTANTE <= 0), el estado es PENDIENTE
+    # Si la tarea es nueva (sin registro en lso estados) (ULTIMO_E == 0), el estado es PENDIENTE
+    [[ "$ESTADO_E" != "EN-PROCESO" ]] && { (( T_FALTANTE <= 0 || ULTIMO_E == 0 )) && ESTADO_E="PENDIENTE"; }
+
+    # 5. ESCRITURA AL ARCHIVO TEMPORAL
+    {
+        echo "[$FINAL_ID]"
+        echo "categoria = $CAT"
+        echo "frecuencia = $FREQ"
+        echo "retencion = $RET"
+        echo "rutas = $RUTAS"
+        [[ "$FINAL_ID" != "101" ]] && echo "compresion = $COMP"
+        echo "ultimo_exito = $ULTIMO_E"
+        echo "tiempo_trasncurrido = $T_TRANS"
+        echo "tiempo_faltante = $T_FALTANTE"
+        echo "estado = $ESTADO_E"
+        echo "pid = $PID_E"
+        echo ""
+    } >> "$TEMP_STATE"
+    ((COUNT_SYNC++))
+done
+
+mv "$TEMP_STATE" "$STATE_FILE"
+log_msg "INFO" "SYSTEM" "Sincronización finalizada ($COUNT_SYNC IDs)."
+
+# =============================================================================
+# FASE 3: ACTUALIZACIÓN Y PROCESAMIENTO DE LOS ESTADOS PARA CREAR BACKUPS
+# =============================================================================
+
+# Sincronización de los paarametros de tiempo respecto al tiempo actual
+sync_state_times() {
+    local ahora
+    ahora=$(date +%s)
+
+    # Creamos un temporal para la actualización atómica
+    local state_temp="$STATE_FILE.tmp"
+    cp "$STATE_FILE" "$state_temp"
+
+    # Extraer todos los IDs del state (excepto el 100 de infraestructura)
+    local ids
+    ids=$(grep -oP '^\[\K[0-9]+(?=\])' "$STATE_FILE" | grep -v "100")
+
+    for id in $ids; do
+        # 1. Obtener valores actuales del archivo de estado
+        local frecuencia ultimo_exito estado
+        frecuencia=$(grep -A 10 "^\[$id\]" "$STATE_FILE" | grep "^frecuencia =" | awk '{print $3}')
+        ultimo_exito=$(grep -A 10 "^\[$id\]" "$STATE_FILE" | grep "^ultimo_exito =" | awk '{print $3}')
+        estado=$(grep -A 10 "^\[$id\]" "$STATE_FILE" | grep "^estado =" | awk '{print $3}')
+
+        # 2. Cálculos precisos
+        # Si ultimo_exito es 0 (nuevo), el transcurrido es igual a 'ahora' (muy alto)
+        local transcurrido=$(( ahora - ultimo_exito ))
+        local faltante=$(( frecuencia - transcurrido ))
+
+        # 3. Lógica de Cambio de Estado
+        # Pasa a PENDIENTE si falta tiempo o si nunca se ha hecho (ultimo_exito = 0)
+        local nuevo_estado="$estado"
+        if [ "$estado" == "REALIZADO" ] && [ $faltante -le 0 ]; then
+            nuevo_estado="PENDIENTE"
+        fi
+
+        # 4. Actualización Multicampo en .state
+        # Usamos sed para buscar el bloque del ID y sustituir los 3 valores
+        sed -i "/^\[$id\]/,/^$/ {
+            s/^tiempo_trasncurrido =.*/tiempo_trasncurrido = $transcurrido/
+            s/^tiempo_faltante =.*/tiempo_faltante = $faltante/
+            s/^estado =.*/estado = $nuevo_estado/
+        }" "$state_temp"
+    done
+
+    # Consolidar cambios
+    mv "$state_temp" "$STATE_FILE"
+}
+
+get_priority_queue() {
+    # 1. IDENTIFICACIÓN: Obtenemos los IDs que están PENDIENTES
+    # (Excluimos el 100 porque es el repositorio base, no una tarea de backup)
+    local ids=$(grep -B 10 "estado = PENDIENTE" "$STATE_FILE" | grep -oP '^\[\K[0-9]+(?=\])' | grep -v "100")
+
+    # 2. RECOLECCIÓN: Creamos la tabla de dos columnas (ID y TIEMPO)
+    local lista_cruda=""
+    for id in $ids; do
+        # Buscamos el tiempo faltante específico para este ID
+        local t=$(grep -A 10 "^\[$id\]" "$STATE_FILE" | grep "^tiempo_faltante =" | awk '{print $3}')
+
+        lista_cruda+="$id $t"$'\n'
+    done
+
+    # 3 y 4. CLASIFICACIÓN Y REFINAMIENTO:
+    # Ordenamos numéricamente por la segunda columna (tiempo) y extraemos el ID
+    
+    #ordemaos la lista basado en la columna 2 con el tiempo faltante
+    local lista_ordenada=$(echo "$lista_cruda" | sed '/^$/d' | sort -k2 -n)
+
+    local resultado=$(echo "$lista_ordenada" | awk '{print $1}')
+
+    echo "$resultado"
+}
+
+# --- [SActualizar los Estados] ---
+
+log_msg "INFO" "SYSTEM" "Sincronizando tiempos de ejecución..."
+
+# Sincronizar los estados respecto al tiempo actual
+sync_state_times
+
+# Generar la cola de IDs
+queue=$(get_priority_queue)
+
+# --- [Mostrar Resumen de la lista de los PENDIENTES] ---
+
+if [ -n "$queue" ]; then
+    #Si la cadena no esta vacia (hay backups pendientes):
+    total_tareas=$(echo "$queue" | wc -l)
+    log_msg "INFO" "SYSTEM" "Tareas pendientes: [$total_tareas]"
+    
+    for id in $queue; do
+        # 1. Extraer datos básicos de forma simple
+        cat=$(grep -A 1 "^\[$id\]" "$STATE_FILE" | grep "^categoria =" | cut -d'=' -f2- | xargs)
+        faltante=$(grep -A 10 "^\[$id\]" "$STATE_FILE" | grep "^tiempo_faltante =" | awk '{print $3}')
+        
+        # 2. Registro único y claro
+        log_msg "INFO" "QUEUE" "Procesando ID: $id | Categoría: $cat | Faltante: ${faltante}s"
+    done
+fi
+
+# --- [Procesar la lista de los PENDIENTES] ---
+
+if [ -z "$queue" ]; then
+    log_msg "INFO" "SYSTEM" "Estado: Todos los respaldos están al día."
+else
+    total_tareas=$(echo "$queue" | wc -l)
+    log_msg "INFO" "SYSTEM" "Tareas pendientes: [$total_tareas]"
+
+    for id in $queue; do
+            cat=$(grep -A 1 "^\[$id\]" "$STATE_FILE" | grep "^categoria =" | cut -d'=' -f2- | xargs)
+
+        # ---------------------------------------------------------------------
+        # CASO ESPECIAL: MANTENIMIENTO DE LOGS (ID 101)
+        # ---------------------------------------------------------------------
+        if [[ "$id" == "101" ]]; then
+            log_msg "INFO" "SYSTEM" "Iniciando mantenimiento de registros (ID 101)"
+            
+            # 1. Obtener parámetros actuales del estado
+            # Usamos la variable global VALID_LOG_PATH definida en la validación inicial
+            limite=$(grep -A 10 "\[101\]" "$STATE_FILE" | grep "^retencion =" | cut -d'=' -f2- | xargs)
+            
+            # 2. Validación de condiciones para el respaldo
+            if [[ -z "$VALID_LOG_PATH" || "$VALID_LOG_PATH" == "null" ]]; then
+                log_msg "WARN" "ID_101" "Respaldo omitido: No se definió una ruta válida para respaldar los Logs."
+                # No hacemos zip, pero reiniciamos el ciclo para que no se quede PENDIENTE eternamente
+                ahora_unix=$(date +%s)
+                sed -i "/^\[101\]/,/^$/ { s/^estado =.*/estado = REALIZADO/; s/^ultimo_exito =.*/ultimo_exito = $ahora_unix/ }" "$STATE_FILE"
+                
+            elif [[ "$limite" -le 0 ]]; then
+                log_msg "WARN" "ID_101" "Respaldo omitido: La retención está configurada en 0."
+                ahora_unix=$(date +%s)
+                sed -i "/^\[101\]/,/^$/ { s/^estado =.*/estado = REALIZADO/; s/^ultimo_exito =.*/ultimo_exito = $ahora_unix/ }" "$STATE_FILE"
+                
+            else
+                # 3. Proceder con el respaldo (Condiciones cumplidas)
+                zip_name="log_backup_$(date +%Y%m%d_%H%M%S).zip"
+                log_msg "INFO" "ID_101" "Condiciones óptimas. Creando respaldo: $zip_name"
+        
+                if zip -j "$VALID_LOG_PATH/$zip_name" "$LOG_FILE" &>> "$LOG_FILE"; then
+                    # Vaciar el log original tras el éxito
+                    true > "$LOG_FILE"
+                    log_msg "INFO" "ID_101" "Respaldo exitoso. Log actual rotado y vaciado."
+                    
+                    # 4. Limpieza de históricos (Prune local)
+                    # Solo si el límite es mayor a 0 (ya validado arriba)
+                    cd "$VALID_LOG_PATH" && ls -t *.zip 2>/dev/null | tail -n +$((limite + 1)) | xargs -r rm
+                    log_msg "INFO" "ID_101" "Limpieza de históricos completada (Límite: $limite)."
+        
+                    # 5. Actualizar Estado
+                    ahora_unix=$(date +%s)
+                    sed -i "/^\[101\]/,/^$/ { s/^estado =.*/estado = REALIZADO/; s/^ultimo_exito =.*/ultimo_exito = $ahora_unix/ }" "$STATE_FILE"
+                else
+                    log_msg "ERROR" "ID_101" "Error técnico al intentar crear el archivo ZIP en $VALID_LOG_PATH."
+                    sed -i "/^\[101\]/,/^$/ { s/^estado =.*/estado = PENDIENTE/ }" "$STATE_FILE"
+                fi
+            fi
+            continue # Finalizar procesamiento del ID 101
+        fi
+    
+        # ---------------------------------------------------------------------
+        # CASO NORMAL: RESPALDO CON BORG (ID 102+)
+        # ---------------------------------------------------------------------
+
+	rutas=$(get_expanded_paths "$STATE_FILE" "$id")
+	repo_dir=$(get_expanded_paths "$CONFIG_FILE" "100" | sed 's/\"//g') #la ruta viene con comillas en state y da problemas con borg, pro eso se eliminan	    
+
+        log_msg "INFO" "SYSTEM" "Iniciando proceso para ID: $id ($cat)"
+
+        # ---------------------------------------------------------------------
+        # PASO 1: Bloqueo de Estado
+        # ---------------------------------------------------------------------
+        sed -i "/^\[$id\]/,/^$/ {
+            s/^estado =.*/estado = EN-PROCESO/
+        }" "$STATE_FILE"
+        log_msg "INFO" "ID_$id" "Inicio Analisis. Estado: (EN-PROCESO)"
+
+        # ---------------------------------------------------------------------
+        # PASO 2: Validación de Viabilidad de Espacio
+        # ---------------------------------------------------------------------
+
+        # A. Obtener tamaño de origen (en bytes)
+        size_bytes=$(du -sb $rutas 2>/dev/null | awk '{sum += $1} END {print sum + 0}')
+
+        # B. Obtener espacio disponible en el repositorio
+        free_bytes=$(df -B1 $repo_dir 2>/dev/null | tail -1 | awk '{print $4}')
+
+        # C. Validación de accesibilidad al repositorio
+        if [ -z "$free_bytes" ]; then
+            log_msg "ERROR" "ID_$id" "Error de acceso: No se pudo obtener espacio en $repo_dir. ¿Disco montado?"
+            sed -i "/^\[$id\]/,/^$/ { s/^estado =.*/estado = PENDIENTE/; s/^pid =.*/pid = 0/ }" "$STATE_FILE"
+            continue
+        fi
+
+        margen_seguridad=$(( 1024 * 1024 * 1024 ))
+        requerido=$(( size_bytes + margen_seguridad ))
+
+        # Log detallado de la validación técnica
+        log_msg "INFO" "ID_$id" "Validación: Origen($size_bytes bytes) + Margen(1GB) = Requerido($requerido). Disponible($free_bytes)."
+
+        if [ "$free_bytes" -lt "$requerido" ]; then
+            faltante=$(( requerido - free_bytes ))
+            log_msg "CRITIC" "ID_$id" "Espacio insuficiente. Faltan $faltante bytes para cumplir el margen de seguridad. Saltando ID."
+
+            # Rollback: Liberar ID para reintento futuro
+            sed -i "/^\[$id\]/,/^$/ { s/^estado =.*/estado = PENDIENTE/; s/^pid =.*/pid = 0/ }" "$STATE_FILE"
+            continue
+        fi
+
+        log_msg "INFO" "ID_$id" "Espacio validado. El margen de 1GB está garantizado."
+        
+        # ---------------------------------------------------------------------
+	# PASO 3: Ejecución de Borg Create
+        # ---------------------------------------------------------------------
+        
+        # A. Extraer parámetros específicos de ejecución del .state
+        comp=$(grep -A 10 "^\[$id\]" "$STATE_FILE" | grep "^compresion =" | awk '{print $3}')
+        # Para la retención, usamos cut para tomar todo lo que sigue al '='
+        retencion=$(grep -A 10 "^\[$id\]" "$STATE_FILE" | grep "^retencion =" | cut -d'=' -f2- | xargs)
+        
+        # B. Configurar Flag de Compresión
+        if [ "$comp" = "0" ]; then
+            COMP_FLAG="zstd,6"
+            log_msg "INFO" "ID_$id" "Compresión activada: zstd,6 (Equilibrado)"
+        else
+            COMP_FLAG="none"
+            log_msg "INFO" "ID_$id" "Compresión desactivada (none)"
+        fi
+
+        # C. Definir nombre del archivo (Timestamp + ID)
+        ARCHIVE_NAME="$(date +'%Y-%m-%d_%H%M')_ID_${id}"
+        
+        log_msg "INFO" "ID_$id" "Iniciando transferencia a Borg: $ARCHIVE_NAME"
+
+        # D. Ejecución de borg create
+        # Usamos eval para que se expandan correctamente las rutas entrecomilladas en $rutas	
+        eval "borg create --compression=$COMP_FLAG $repo_dir::$ARCHIVE_NAME $rutas 2>> $LOG_FILE"
+        
+	if [ $? -eq 0 ]; then
+            ahora_unix=$(date +%s)
+            log_msg "INFO" "ID_$id" "Respaldo creado exitosamente."
+            
+            # Actualizamos éxito y estado antes de podar
+            sed -i "/^\[$id\]/,/^$/ { 
+                s/^estado =.*/estado = REALIZADO/
+                s/^ultimo_exito =.*/ultimo_exito = $ahora_unix/
+            }" "$STATE_FILE"
+
+            # ---------------------------------------------------------------------
+            # PASO 4: Ejecución de Borg Prune (Limpieza)
+            # ---------------------------------------------------------------------
+            log_msg "INFO" "ID_$id" "Iniciando limpieza (Prune) con política: $retencion"
+            
+            # Ejecutamos prune filtrando por el ID para no borrar backups de otras tareas
+            eval "borg prune --glob-archives *_ID${id} $retencion $repo_dir 2>> $LOG_FILE"
+        
+            
+            if [ $? -eq 0 ]; then
+                log_msg "INFO" "ID_$id" "Limpieza finalizada correctamente."
+            else
+		    log_msg "WARN" "ID_$id" "El respaldo se creó, pero la limpieza (prune) reportó alertas. Más info en Logs" "true"
+
+                    # Rollback de estado para reintento en el próximo ciclo
+                    sed -i "/^\[$id\]/,/^$/ { 
+                    s/^estado =.*/estado = PENDIENTE/
+                    s/^pid =.*/pid = 0/
+                    }" $STATE_FILE
+            fi
+        else
+            # Error en la creación
+            log_msg "CRITIC" "ID_$id" "Fallo el borg create. El respaldo no se completó. Más info en Logs"
+            
+            # Rollback de estado para reintento en el próximo ciclo
+            sed -i "/^\[$id\]/,/^$/ { 
+                s/^estado =.*/estado = PENDIENTE/
+                s/^pid =.*/pid = 0/
+            }" $STATE_FILE
+        fi
+
+        log_msg "INFO" "SYSTEM" "Finalizado procesamiento de ID: $id"
+
+    done
+fi
+
