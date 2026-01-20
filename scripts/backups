@@ -192,8 +192,10 @@ log_msg "INFO" "SYSTEM" "Instancia validada. Lockfile creado (PID: $$)."
 mkdir -p "$CONFIG_DIR" "$STATE_DIR"
 
 # 2. Archivo de Configuración
-if [ ! -f "$CONFIG_FILE" ]; then
-    cat <<EOF > "$CONFIG_FILE"
+#
+if [ ! -f "$CONFIG_FILE" || ! -s "$CONFIG_FILE" ]; then
+   log_msg "WARN" "SYSTEM" "Archivo de configuración no existe o esta vacio." 
+   cat <<EOF > "$CONFIG_FILE"
 # =============================================================================
 #            CONFIGURACIÓN DEL GESTOR DE BACKUPS (BORG_MANAGER)
 # =============================================================================
@@ -252,8 +254,8 @@ rutas = ~/Backups/Borg-Backups/Logs
 #compression = True
 
 # >>> AÑADE TUS NUEVAS CATEGORÍAS A PARTIR DE AQUÍ <<<
-
 EOF
+
     log_msg "WARN" "SYSTEM" "Archivo de configuración creado con plantilla. Edítelo antes de continuar." "true"
 else
     if [ ! -r "$CONFIG_FILE" ]; then
