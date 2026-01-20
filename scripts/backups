@@ -165,7 +165,7 @@ log_msg "INFO" "SYSTEM" "Canales de comunicación inicializados correctamente."
 # =============================================================================
 
 # 1. La Trampa de Limpieza (Elimina el archivo de bloqueo)
-trap 'log_msg "INFO" "SYSTEM" "Cerrando script: Limpiando recursos..."; rm -f "$LOCKFILE";exit' EXIT SIGINT SIGTERM
+trap 'log_msg "INFO" "SYSTEM" "Cerrando script: Limpiando recursos..."; rm -f "$LOCKFILE"; rm -f "$STRIPPED_CONFIG"; exit' EXIT SIGINT SIGTERM
 
 # 2. Validación de Existencia
 log_msg "INFO" "SYSTEM" "Validando instancia única..."
