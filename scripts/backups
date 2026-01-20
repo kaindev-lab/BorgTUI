@@ -26,8 +26,8 @@ get_expanded_paths() {
     local paths_array
     local final_paths=""
 
-    # 1. Extraer la línea cruda (manejando el ID y eliminando basura \r)
-    raw_val=$(sed -n "/^\[$id\]/,/^\[/p" "$file" | grep "^rutas =" | cut -d'=' -f2-)
+    # 1. Extraer la línea cruda (manejando el ID y eliminando basura)
+    raw_val=$(sed -n "/^\[$id\]/,/^\[/p" "$file" | sed 's/#.*//' | grep "^rutas =" | cut -d'=' -f2-)
     
     # 2. Usamos eval para que Bash interprete las comillas del archivo .conf
     # Esto expande las rutas correctamente dentro de un array
