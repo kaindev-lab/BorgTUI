@@ -193,7 +193,7 @@ mkdir -p "$CONFIG_DIR" "$STATE_DIR"
 
 # 2. Archivo de Configuración
 #
-if [ ! -f "$CONFIG_FILE" || ! -s "$CONFIG_FILE" ]; then
+if [[ ! -f "$CONFIG_FILE" || ! -s "$CONFIG_FILE" ]]; then
    log_msg "WARN" "SYSTEM" "Archivo de configuración no existe o esta vacio." 
    cat <<EOF > "$CONFIG_FILE"
 # =============================================================================
@@ -257,6 +257,7 @@ rutas = ~/Backups/Borg-Backups/Logs
 EOF
 
     log_msg "WARN" "SYSTEM" "Archivo de configuración creado con plantilla. Edítelo antes de continuar." "true"
+    exit 0
 else
     if [ ! -r "$CONFIG_FILE" ]; then
         log_msg "CRITIC" "SYSTEM" "No se puede leer el archivo de configuración en $CONFIG_FILE."
