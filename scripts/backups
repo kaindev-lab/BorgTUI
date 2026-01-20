@@ -600,12 +600,12 @@ log_msg "INFO" "SYSTEM" "Sincronización finalizada. IDs procesados: $COUNT_SYNC
 # FASE 3: ACTUALIZACIÓN Y PROCESAMIENTO DE LOS ESTADOS PARA CREAR BACKUPS
 # =============================================================================
 
-# Sincronización de los paarametros de tiempo respecto al tiempo actual
+# Sincronización de los parametros de tiempo respecto al tiempo actual
 sync_state_times() {
     local ahora
     ahora=$(date +%s)
 
-    # Creamos un temporal para la actualización atómica
+    # Creamos un archivo de estados temporal para procesar la infromación
     local state_temp="$STATE_FILE.tmp"
     cp "$STATE_FILE" "$state_temp"
 
@@ -620,22 +620,36 @@ sync_state_times() {
         ultimo_exito=$(grep -A 9 "^\[$id\]" "$STATE_FILE" | grep "^ultimo_exito =" | awk '{print $3}')
         estado=$(grep -A 9 "^\[$id\]" "$STATE_FILE" | grep "^estado =" | awk '{print $3}')
 
-        # 2. Cálculos precisos
-        # Si ultimo_exito es 0 (nuevo), el transcurrido es igual a 'ahora' (muy alto)
+        # 2. Cálculos de tiempo
         local transcurrido=$(( ahora - ultimo_exito ))
         local faltante=$(( frecuencia - transcurrido ))
 
         # 3. Lógica de Cambio de Estado
         local nuevo_estado="$estado"
-        # Pasa a PENDIENTE si falta tiempo o si nunca se ha hecho (ultimo_exito = 0)
-        if [ "$estado" == "REALIZADO" ] && [ $faltante -le 0 ]; then
+	
+	# Pasa a PENDIENTE si es una tarea nueva (ultimo exito = 0)
+	if [ $ultimo_exito -eq 0 ]; then
             nuevo_estado="PENDIENTE"
         fi
         #Pasa a PENDIENTE si estado es EN-PROCESO (el proceso anterior no se termino correctamente)
-        if [ "$estado" == "EN-PROCESO" ] && [ $faltante -le 0 ]; then
+        if [ $faltante -le 0 ]; then
             log_msg "ERROR" "ID_$id" "Se detecto un proceso de backup que no termino correctamente en el anterior ciclo"
             nuevo_estado="PENDIENTE"
         fi
+	#Pasa a PENDIENTE si el valor del tiempo faltante en valores positivos (tiempo faltante normal) es mayor a la frecuencia.
+	#El tiempo faltante nunca debería de ser mayor a la frecuencia, debe ser maximo la frecuencia.
+	#Es normal un tiempo de retraso puede exitir (menor a 0 y un tiempo faltante mayor a 0 y menor a la frecuencia.
+	#Si hay un tiempo faltante mayor a la frecuencia, probablemente se deba a un desajuste temporal, como hora del sistema atrasada.
+        if [[ "$estado" == "REALIZADO" ]] && [ $faltante -ge $frecuencia ]; then
+            nuevo_estado="PENDIENTE"
+        fi	
+	#Pasa a PENDIENTE si el el tiempo faltante esta en valores negativos (tiempo de retraso).
+	#Esto no es necesaiarmente un desajuste temporal o una hora del sistema adelantada o un errror del sistema.
+	#Podría darse por ejemplo si el activador del sistema como 'cron' estaba desactivado, el pc estuvo apagado por mucho tiempo.
+	#En este caso se hace prioritario realizar el backup de estas tareas con retraso, así que pasa a PENDIENTE 
+        if [[ "$estado" == "REALIZADO" ]] && [ $faltante -le 0 ]; then
+            nuevo_estado="PENDIENTE"
+        fi	
 
         # 4. Actualización Multicampo en .state
         # Usamos sed para buscar el bloque del ID y sustituir los 3 valores
