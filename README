@@ -688,18 +688,9 @@ Si un ID existe en el archivo `.state` pero ha sido eliminado del archivo `.conf
 
 ### 3. Duplicidad de IDs
 
-Se creará una lista de IDs procesados y antes de procesar una nueva categoria, se valida si su ID ya fue procesado. Si se identifica que el ID ya fue procesado, se valdia si los datos son diferentes:
+* Los IDs Repetidos se omiten y se informa al usuario al omisión.
 
-* Si los datos son diferentes: Se asigna un nuevo ID a la categoria y se registra en al lista de IDs. **LOG-LEVEL: WARN**.
-* Si los datos no son iguales: Se omite la creación de la categporia en el archivo de estados. **LOG-LEVEL: WARN** (FORZAR_NOTIF=true). 
-
-#### 5. Filtrado de Datos y Prevenmción de errores.
-
-Para un mejor procesamiento, se tomarán medidas como:
-
-* Antes de prcesar los datos, se eliminara todo lo que venga depeues de # (comenatrio) (s/#.*$//)
-
-* Los IDS repetidos no se procesan y se le iforoma al usuario cuales IDs estan repetidos y serán ignorados. **LOG-LEVEL: WARN** (FORZAR_NOTIF=true).
+* Los IDs sin duplicados se procesan con normalidad.
 
 ---
 
@@ -707,7 +698,6 @@ Para un mejor procesamiento, se tomarán medidas como:
 
 Al terminar esta sincronización, el script emite un resumen final de la cola de trabajo:
 
-> `[INFO] [SYSTEM] : Actualización de datos finalizada. Sincronizados [X] IDs. Tareas en espera: [Y].` **LOG-LEVEL: INFO**.
 
 
 
