@@ -338,7 +338,7 @@ Antes de iniciar la Fase 1, el script debe validar la existencia de estas herram
 * **Herramientas de Gestión de Logs y Sistema**
 * **Zip / Gzip**: (Rotación de logs). El script necesita comprimir los archivos `.log` antes de moverlos al histórico.
 * **Utilidades de Proceso**:
-* `ps`: Para verificar si el `PID` guardado en el archivo de estado sigue activo (detección de procesos zombis).
+* `ps`: Para verificar si el el LOCKFILE del Script Orquestador si es valido.
 * `nice`: Para asegurar que el backup corra con prioridad baja y no ralentice el PC.
 
 
