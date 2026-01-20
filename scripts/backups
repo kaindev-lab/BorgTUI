@@ -83,7 +83,29 @@ get_val_state() {
 }
 
 
-# 2. Verificación de Acceso a la interfaz grafica.
+# Pasar de bytes a un formato readable to human
+format_bytes() {
+    local bytes=$1
+    if [[ -z "$bytes" || "$bytes" -eq 0 ]]; then
+        echo "0 B"
+        return
+     Kent
+    fi
+
+    # Usamos awk para manejar las potencias de 1024 y los decimales
+    echo "$bytes" | awk '{
+        split("B KB MB GB TB PB", unit);
+        i=1;
+        while($1 >= 1024 && i < 6) {
+            $1 /= 1024;
+            i++;
+        }
+        printf "%.2f %s\n", $1, unit[i]
+    }'
+}
+
+
+# Verificación de Acceso a la interfaz grafica.
 HAS_NOTIFY=false # programa para notificaiones.
 HAS_DISPLAY=false # intefaz grafica disponible.
 [ -x "$(command -v notify-send)" ] && HAS_NOTIFY=true
@@ -783,7 +805,7 @@ else
         for ruta in $rutas_limpias; do
             # 3. DOBLE COMILLA EN EL COMANDO: Esto es vital para que bash interprete bien la ruta si tiene espacios
             parcial=$(du -sb "$ruta" 2>/dev/null | cut -f1)
-       
+
             # Sumamos al acumulador
             total_bytes=$((total_bytes + ${parcial:-0}))
         done
@@ -810,12 +832,17 @@ else
         margen_seguridad=$(( 1024 * 1024 * 1024 )) # 1GB
         requerido=$(( total_bytes + margen_seguridad ))
 
-        # Log detallado de la validación técnica
-        log_msg "INFO" "ID_$id" "Validación: Origen($total_bytes bytes) + Margen(1GB) = Requerido($requerido). Disponible($free_bytes)."
+        # Log detallado de la validación técnicai
+        human_requerido=$(format_bytes $requerido)
+        human_total_bytes=$(format_bytes $total_bytes)
+        human_free_bytes=$(format_bytes $free_bytes)
+
+        log_msg "INFO" "ID_$id" "Validación: Origen($human_total_bytes bytes) + Margen(1GB) = Requerido($human_requerido). Disponible($human_free_bytes)."
 
         if [ "$free_bytes" -lt "$requerido" ]; then
             faltante=$(( requerido - free_bytes ))
-            log_msg "CRITIC" "ID_$id" "Espacio insuficiente. Faltan $faltante bytes para cumplir el margen de seguridad. Saltando ID."
+	    human_faltante=$(format_bytes $faltantes)
+            log_msg "CRITIC" "ID_$id" "Espacio insuficiente. Faltan $human_faltante bytes para cumplir el margen de seguridad. Saltando ID."
 
             # Rollback: Liberar ID para reintento futuro
             sed -i "/^\[$id\]/,/^$/ { s/^estado =.*/estado = PENDIENTE/; s/^pid =.*/pid = 0/ }" "$STATE_FILE"
