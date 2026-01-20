@@ -57,10 +57,12 @@ get_config_value() {
 
     # 1. Filtramos el bloque de la sección
     # 2. Buscamos el campo exacto (añadimos ^ para inicio de línea)
-    # 3. Cortamos por el '='
-    # 4. Convertimos a parametro validos con xargs, que interpeta bien los espacios en la retención y elimina espaciso inecesarios.
+    # 3. Tomamos solo el primer resultado, en caso que haya resultados sueltos comoc uando se comenta los otros IDS en el CONFIG_FILE.
+    # 4. Obtenemos el valor siguiente aignado ('= asignado')
+    # 5. Convertimos a parametro validos con xargs, que interpeta bien los espacios en la retención y elimina espaciso inecesarios.
     value=$(sed -n "/^\[$section_id\]/,/^\[/p" "$file" \
             | grep "^$field_name =" \
+            | head -n \
             | cut -d'=' -f2- \
             | xargs)
 
