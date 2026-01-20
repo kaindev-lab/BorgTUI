@@ -439,19 +439,17 @@ IDS_REPETIDOS=()
 # Declaramos un array asociativo interno para la lógica de conteo
 declare -A contador_ids
 
-# Primer paso: Clasificación de IDs
-for id in $IDS_CONFIGURADOS; do
-    if [[ -z "${contador_ids[$id]}" ]]; then
-        # Es la primera vez que lo vemos
-        IDS_UNICOS+=("$id")
-        contador_ids[$id]=1
-    else
-        # Ya existe en el contador, es un duplicado
-        # Solo lo añadimos a la lista de repetidos si no está ya ahí
-        if [[ "${contador_ids[$id]}" -eq 1 ]]; then
-            IDS_REPETIDOS+=("$id")
-        fi
+#Conteo de repeticiones
+for id in $IDS_CONFIGURADOS; do 
         ((contador_ids[$id]++))
+done
+
+# Clasificación de IDs
+for id in $IDS_CONFIGURADOS; do        
+    if [[ "${contador_ids[$id]}" -eq 1 ]]; then
+	IDS_UNICOS+=("$id")
+    elif [[ ! " ${IDS_REPETIDOS[@]} " =~ " $id " ]]; then
+	IDS_REPETIDOS+=("$id")
     fi
 done
 
