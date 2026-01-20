@@ -812,7 +812,7 @@ else
             log_msg "INFO" "ID_$id" "Iniciando limpieza (Prune) con política: $retencion"
             
             # Ejecutamos prune filtrando por el ID para no borrar backups de otras tareas
-            eval "borg prune --glob-archives *_ID${id} $retencion $repo_dir 2>> $LOG_FILE"
+            eval "borg prune --glob-archives *_ID_${id} $retencion $repo_dir 2>> $LOG_FILE"
         
             
             if [ $? -eq 0 ]; then
