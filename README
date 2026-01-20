@@ -234,58 +234,44 @@ pid = 123
 
 ---
 
-### C. Archivo de Registro (`backups.log`)
+### C. Sistema de Trazabilidad y Logs
 
-El log funcionará como una bitácora técnica para auditorias. Cada vez que el script realice una acción o detecte un cambio, escribirá una línea con el siguiente formato:
+El script utiliza un sistema de registro centralizado mediante la función `log_msg()`. Esta lógica prioriza la legibilidad y permite una auditoría rápida mediante niveles de severidad y contextos específicos.
 
-**Formato:** `[FECHA HORA] [ID] [ESTADO] [INFO_ID] [MENSAJE] [INFO_MENSAJE]`
+#### 1. Formato de Registro
 
-#### 1. Definición de Campos
+Cada entrada en `backups.log` sigue una estructura predecible:
+`[FECHA HORA] [NIVEL] [CONTEXTO] : MENSAJE`
 
-* **[FECHA HORA]:** Marca de tiempo del evento (`YYYY-MM-DD HH:MM:SS`).
-* **[ID]:** Identificador numérico único de la categoría.
-* **[ESTADO]:** Define la situación de la tarea en ese instante. Solo existen tres:
-   * `PENDIENTE`: La tarea está a la espera de que se cumpla su frecuencia o su turno.
-   * `EN-PROCESO`: La tarea se está ejecutando actualmente.
-   * `REALIZADO`: La tarea ha finalizado con éxito (incluyendo su respectiva poda de Borg).
+#### 2. Definición de Campos
 
-
-* **[INFO_ID]:** Registro de los parámetros de configuración vigentes en el momento del registro. Esto permite saber qué se respaldó aunque luego cambies la configuración.
-* *Contenido:* `[Categoría | Frecuencia | Rutas]`
-
-
-* **[MENSAJE]:** La acción exacta que el script está realizando. Solo usaremos estas etiquetas:
-* `CREAR_SNAPSHOT`: Proceso de creación de backup en Borg.
-* `PODA_BACKUPS`: Eliminación de backups antiguos según la política de retención.
-* `ROTACION_LOGS`: Proceso de comprimir el log viejo y vaciar el actual.
-* `LIMPIEZA_LOGS`: Eliminación de archivos comprimidos de log antiguos según la política de retención.
-* `ERROR`: Cualquier fallo en las acciones anteriores. Por ejemplo cuando se detecta un ID con `estado = EN-PROCESO`, pero el 'pid' asociado no se encuentra en ejecución, lo que puede indicar una interrupción en el proceso. 
-
-* **[INFO_ID]:** Infomración expandida del MENSAJE.
-
-* **Si es `CREAR_SNAPSHOT`:** Borg genera metadatos tras cada copia que permiten ver la eficiencia del backup. Mostramos el nombre asignado, su hash único, tiempo de ejecución y la comparativa de tamaños (original vs. lo que realmente ocupa tras comprimir y deduplicar).
-* **Ejemplo:** `Lab-102-2026-01-10_14:30 | a7b8c9d... | 45s | 500MB | 200MB | +12MB`
+* **`[FECHA HORA]`**: Marca de tiempo precisa (`YYYY-MM-DD HH:MM:SS`).
+* **`[NIVEL]`**: Clasificación de la importancia del evento:
+* `INFO`: Operaciones normales (inicio de backup, limpieza finalizada).
+* `WARN`: Advertencias técnicas o reintentos (ej. falta de notify-send).
+* `ERROR`: Fallos en tareas específicas (ej. repositorio bloqueado).
+* `CRITIC`: Errores del sistema que requieren atención inmediata.
 
 
-* **Si es `PODA_BACKUPS`:** Al ejecutar la retención (prune), el sistema indica cuántos archivos viejos se borraron y cuántos quedan para asegurar que la política se cumple.
-* **Ejemplo:** `Eliminados: 4 | Conservados: 11 | Espacio liberado: 1.2GB`
+* **`[CONTEXTO]`**: Origen de la traza. Puede ser `SYSTEM` para lógica interna o el ID específico de la tarea (ej. `ID_101`, `ID_102`).
+* **`MENSAJE`**: Descripción clara de la acción realizada o del error detectado.
+
+---
+
+#### 3. Salida y Notificaciones
+
+El sistema de logs es inteligente y distribuye la información en tres canales:
+
+1. **Archivo de Registro**: Persistencia en `$LOG_FILE` para auditorías históricas.
+2. **Consola (TTY)**: Salida coloreada en tiempo real para facilitar la depuración visual:
+* <span style="color:green">**Verde**</span> para `INFO`.
+* <span style="color:yellow">**Amarillo**</span> para `WARN`.
+* <span style="color:red">**Rojo**</span> para `ERROR/CRITIC`.
 
 
-* **Si es `ROTACION_LOGS`:** Registra el nombre del archivo comprimido generado y el tamaño del log que se acaba de vaciar para tener trazabilidad del histórico.
-* **Ejemplo:** `log_2026_01.zip | 2.5MB | Destino: ~/.config/BorgBackup/logs/`
+3. **Notificaciones de Escritorio**: (Actualmente en depuración) Envío de alertas críticas mediante `notify-send` cuando el entorno lo permite.
 
-
-* **Si es `LIMPIEZA_LOGS`:** Indica qué archivo histórico fue eliminado permanentemente al superar el límite de retención configurado.
-* **Ejemplo:** `Eliminado: log_2025_01.zip | Quedan: 12 archivos`
-
-
-* **Si es `ERROR`:** Describe el fallo técnico y, en caso de interrupciones de sistema, identifica si se detectó un proceso "zombi".
-* **Ejemplo (Fallo):** `REPO_LOCKED | El repositorio está en uso por otro proceso | Acción: Termina el proceso
-* **Ejemplo (Interrupción):** `PROCESO-ZOMBI | El proceso no termino bein en la ultima ejecución | Acción: Reseteo de estado para reintento`
-
-
-
-#### 2. Gestión de Rotación y Resguardos Comprimidos
+#### 4. Gestión de Rotación y Resguardos Comprimidos
 
 Para mantener el sistema organziado y liviano, usamos la configuración del ID `[101]`:
 
