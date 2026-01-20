@@ -62,7 +62,7 @@ get_config_value() {
     # 5. Convertimos a parametro validos con xargs, que interpeta bien los espacios en la retención y elimina espaciso inecesarios.
     value=$(sed -n "/^\[$section_id\]/,/^\[/p" "$file" \
             | grep "^$field_name =" \
-            | head -n \
+            | head -n 1 \
             | cut -d'=' -f2- \
             | xargs)
 
