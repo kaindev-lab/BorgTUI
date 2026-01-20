@@ -279,9 +279,9 @@ El log funcionará como una bitácora técnica para auditorias. Cada vez que el 
 * **Ejemplo:** `Eliminado: log_2025_01.zip | Quedan: 12 archivos`
 
 
-* **Si es `ERROR`:** Describe el fallo técnico y, en caso de interrupciones de sistema, identifica si se detectó un proceso "zombi" (estado EN-PROCESO sin un PID activo).
-* **Ejemplo (Fallo):** `REPO_LOCKED | El repositorio está en uso por otro proceso | Acción: Cambio de estado a PENDIENTE`
-* **Ejemplo (Interrupción):** `PID_MISSING | El PID 4521 no existe | Acción: Reseteo de estado para reintento`
+* **Si es `ERROR`:** Describe el fallo técnico y, en caso de interrupciones de sistema, identifica si se detectó un proceso "zombi".
+* **Ejemplo (Fallo):** `REPO_LOCKED | El repositorio está en uso por otro proceso | Acción: Termina el proceso
+* **Ejemplo (Interrupción):** `PROCESO-ZOMBI | El proceso no termino bein en la ultima ejecución | Acción: Reseteo de estado para reintento`
 
 
 
@@ -322,7 +322,7 @@ Para que el sistema sea resiliente, organizado, facil de usar y mantener, el scr
 | Componente | Variable XDG | Ruta por Defecto | Responsabilidad |
 | --- | --- | --- | --- |
 | **Configuración** | `XDG_CONFIG_HOME` | `~/.config/backups_manager/` | **Usuario:** Define rutas, frecuencias e IDs. |
-| **Memoria (Estado)** | `XDG_DATA_HOME` | `~/.local/share/backups_manager/` | **Script:** Registra PIDs, éxitos y tiempos. |
+| **Memoria (Estado)** | `XDG_DATA_HOME` | `~/.local/share/backups_manager/` | **Script:** Registra éxitos y tiempos. |
 | **Bitácora (Log)** | `XDG_CACHE_HOME` | `~/.cache/backups_manager/` | **Script:** Escribe eventos técnicos en tiempo real. |
 | **Repositorio** | *(Personalizada)* | *(Definida en ID 100)* | **Borg:** Almacena los bloques de datos. |
 | **Logs ZIP** | *(Personalizada)* | *(Definida en ID 101)* | **Script:** Guarda los registros históricos comprimidos. |
@@ -746,7 +746,7 @@ Realiza los calculos de los valores asociados a cada ID para usarlos en el progr
 3. **Marcado de Estados:**
 * Si `tiempo_faltante <= 0` AND `estado == "REALIZADO"` → Cambiar a `PENDIENTE`. **LOG-LEVEL: INFO**
 * Si `estado == "PENDIENTE"` AND `tiempo_faltante >= -frecuencia` (lleva almenos 1 retraso en 1 back) → Notifica el **Retraso**. **LOG-LEVEL: WARN** (FORZAR_NOTIF=true).
-* Si `estado == EN-PROCESO` AND `PID no esta corriendo` → Cambiar a `PENDIENTE`. Esto indica que se incio el proceso de backup con ese ID asociado, pero algo salio mal. **LOG-LEVEL: WARN** (FORZAR_NOTIF=true).
+* Si `estado == EN-PROCESO` → Cambiar a `PENDIENTE`. Esto indica que el proceso se incio, pero algo salio mal. **LOG-LEVEL: WARN** (FORZAR_NOTIF=true).
 
 ### Ordenamiento 
 

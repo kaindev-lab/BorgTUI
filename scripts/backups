@@ -556,7 +556,6 @@ for SEC in $IDS_CONFIGURADOS; do
     # 4. SINCRONIZACIÓN CON EL ESTADO ANTERIOR (Con valores por defecto para IDs nuevos)
     ULTIMO_E=$(get_val_state "$STATE_FILE" "$FINAL_ID" "ultimo_exito"); ULTIMO_E=${ULTIMO_E:-0}
     ESTADO_E=$(get_val_state "$STATE_FILE" "$FINAL_ID" "estado"); ESTADO_E=${ESTADO_E:-"PENDIENTE"}
-    PID_E=$(get_val_state "$STATE_FILE" "$FINAL_ID" "pid"); PID_E=${PID_E:-0}
 
     T_TRANS=$((AHORA - ULTIMO_E))
     # Si nunca se ha ejecutado (0), el tiempo transcurrido debe ser 0
@@ -581,7 +580,6 @@ for SEC in $IDS_CONFIGURADOS; do
         echo "tiempo_trasncurrido = $T_TRANS"
         echo "tiempo_faltante = $T_FALTANTE"
         echo "estado = $ESTADO_E"
-        echo "pid = $PID_E"
         echo ""
     } >> "$TEMP_STATE"
     ((COUNT_SYNC++))
@@ -610,9 +608,9 @@ sync_state_times() {
     for id in $ids; do
         # 1. Obtener valores actuales del archivo de estado
         local frecuencia ultimo_exito estado
-        frecuencia=$(grep -A 10 "^\[$id\]" "$STATE_FILE" | grep "^frecuencia =" | awk '{print $3}')
-        ultimo_exito=$(grep -A 10 "^\[$id\]" "$STATE_FILE" | grep "^ultimo_exito =" | awk '{print $3}')
-        estado=$(grep -A 10 "^\[$id\]" "$STATE_FILE" | grep "^estado =" | awk '{print $3}')
+        frecuencia=$(grep -A 9 "^\[$id\]" "$STATE_FILE" | grep "^frecuencia =" | awk '{print $3}')
+        ultimo_exito=$(grep -A 9 "^\[$id\]" "$STATE_FILE" | grep "^ultimo_exito =" | awk '{print $3}')
+        estado=$(grep -A 9 "^\[$id\]" "$STATE_FILE" | grep "^estado =" | awk '{print $3}')
 
         # 2. Cálculos precisos
         # Si ultimo_exito es 0 (nuevo), el transcurrido es igual a 'ahora' (muy alto)
@@ -620,9 +618,14 @@ sync_state_times() {
         local faltante=$(( frecuencia - transcurrido ))
 
         # 3. Lógica de Cambio de Estado
-        # Pasa a PENDIENTE si falta tiempo o si nunca se ha hecho (ultimo_exito = 0)
         local nuevo_estado="$estado"
+        # Pasa a PENDIENTE si falta tiempo o si nunca se ha hecho (ultimo_exito = 0)
         if [ "$estado" == "REALIZADO" ] && [ $faltante -le 0 ]; then
+            nuevo_estado="PENDIENTE"
+        fi
+        #Pasa a PENDIENTE si estado es EN-PROCESO (el proceso anterior no se termino correctamente)
+        if [ "$estado" == "EN-PROCESO" ] && [ $faltante -le 0 ]; then
+            log_msg "ERROR" "ID_$id" "Se detecto un proceso de backup que no termino correctamente en el anterior ciclo"
             nuevo_estado="PENDIENTE"
         fi
 
@@ -648,7 +651,7 @@ get_priority_queue() {
     local lista_cruda=""
     for id in $ids; do
         # Buscamos el tiempo faltante específico para este ID
-        local t=$(grep -A 10 "^\[$id\]" "$STATE_FILE" | grep "^tiempo_faltante =" | awk '{print $3}')
+        local t=$(grep -A 9 "^\[$id\]" "$STATE_FILE" | grep "^tiempo_faltante =" | awk '{print $3}')
 
         lista_cruda+="$id $t"$'\n'
     done
@@ -684,7 +687,7 @@ if [ -n "$queue" ]; then
     for id in $queue; do
         # 1. Extraer datos básicos de forma simple
         cat=$(grep -A 1 "^\[$id\]" "$STATE_FILE" | grep "^categoria =" | cut -d'=' -f2- | xargs)
-        faltante=$(grep -A 10 "^\[$id\]" "$STATE_FILE" | grep "^tiempo_faltante =" | awk '{print $3}')
+        faltante=$(grep -A 9 "^\[$id\]" "$STATE_FILE" | grep "^tiempo_faltante =" | awk '{print $3}')
         
         # 2. Registro único y claro
         log_msg "INFO" "QUEUE" "Procesando ID: $id | Categoría: $cat | Faltante: ${faltante}s"
@@ -710,7 +713,7 @@ else
             
             # 1. Obtener parámetros actuales del estado
             # Usamos la variable global VALID_LOG_PATH definida en la validación inicial
-            limite=$(grep -A 10 "\[101\]" "$STATE_FILE" | grep "^retencion =" | cut -d'=' -f2- | xargs)
+            limite=$(grep -A 9 "\[101\]" "$STATE_FILE" | grep "^retencion =" | cut -d'=' -f2- | xargs)
             
             # 2. Validación de condiciones para el respaldo
             if [[ -z "$VALID_LOG_PATH" || "$VALID_LOG_PATH" == "null" ]]; then
@@ -806,9 +809,9 @@ else
         # ---------------------------------------------------------------------
         
         # A. Extraer parámetros específicos de ejecución del .state
-        comp=$(grep -A 10 "^\[$id\]" "$STATE_FILE" | grep "^compresion =" | awk '{print $3}')
+        comp=$(grep -A 9 "^\[$id\]" "$STATE_FILE" | grep "^compresion =" | awk '{print $3}')
         # Para la retención, usamos cut para tomar todo lo que sigue al '='
-        retencion=$(grep -A 10 "^\[$id\]" "$STATE_FILE" | grep "^retencion =" | cut -d'=' -f2- | xargs)
+        retencion=$(grep -A 9 "^\[$id\]" "$STATE_FILE" | grep "^retencion =" | cut -d'=' -f2- | xargs)
         
         # B. Configurar Flag de Compresión
         if [ "$comp" = "0" ]; then
