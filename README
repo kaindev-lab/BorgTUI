@@ -675,7 +675,7 @@ Para evitar que un cambio en la configuración reinicie el ciclo de backups, se 
 
 Hay datos que se calculan en tiempo de ejecución y guardan información critica para el funcionamiento correcto de los backups automaticos. Estos datos no se actualizan respecto al archivo de configuraciones, sino que se actualizan solo en tiempo de ejecución. Estos datos son:
 
-* `ultimo_exito` y `pid`. No se tocan, ya que representan la historia y la actividad real del proceso.
+* `ultimo_exito` No se tocan, ya que representan la historia y la actividad real del proceso.
 * **Estado:** Solo se actualiza si el valor actual es `REALIZADO` y tras el nuevo cálculo de tiempos el `tiempo_faltante` resulta  (pasando a `PENDIENTE`). Si el estado es `EN-PROCESO`, se respeta para evitar colisiones.
 * `tiempo trasncurrido` y `tiempo faltante` se calculan en en timepo de ejecución en base a la hora actual y el `ultimo exito`.
 
@@ -723,7 +723,7 @@ Realiza los calculos de los valores asociados a cada ID para usarlos en el progr
 
 3. **Marcado de Estados:**
 * Si `tiempo_faltante <= 0` AND `estado == "REALIZADO"` → Cambiar a `PENDIENTE`. **LOG-LEVEL: INFO**
-* Si `estado == "PENDIENTE"` AND `tiempo_faltante >= -frecuencia` (lleva almenos 1 retraso en 1 back) → Notifica el **Retraso**. **LOG-LEVEL: WARN** (FORZAR_NOTIF=true).
+* Si `estado == "REALIZADO"` AND `tiempo_faltante > frecuencia` (lleva almenos 1 retraso en 1 back) → Notifica el **Retraso** y cambia el estado PENDIENTE. **LOG-LEVEL: WARN** (FORZAR_NOTIF=true).
 * Si `estado == EN-PROCESO` → Cambiar a `PENDIENTE`. Esto indica que el proceso se incio, pero algo salio mal. **LOG-LEVEL: WARN** (FORZAR_NOTIF=true).
 
 ### Ordenamiento 
