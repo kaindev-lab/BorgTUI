@@ -774,24 +774,44 @@ else
         # PASO 2: Validación de Viabilidad de Espacio
         # ---------------------------------------------------------------------
 
-        # A. Obtener tamaño de origen (en bytes)
-        size_bytes=$(du -sb $rutas 2>/dev/null | awk '{sum += $1} END {print sum + 0}')
-
+        # 1. ELIMINAR COMILLAS LITERALES: Esto quita las " de la cadena que podrían confundir a bash e interpetarlas como lietarles
+        rutas_limpias=$(echo "$rutas" | tr -d '"')
+        
+        total_bytes=0
+        
+        # 2. ITERAR: Usamos la variable ya limpia
+        for ruta in $rutas_limpias; do
+            # 3. DOBLE COMILLA EN EL COMANDO: Esto es vital para que bash interprete bien la ruta si tiene espacios
+            parcial=$(du -sb "$ruta" 2>/dev/null | cut -f1)
+       
+            # Sumamos al acumulador
+            total_bytes=$((total_bytes + ${parcial:-0}))
+        done
+       
+        # nota: Algunos coamndos como 'du' no manejan bien las comillas. recuerda que para bash $variable("my file") no es igual "$variable"(my file)
+ 
         # B. Obtener espacio disponible en el repositorio
         free_bytes=$(df -B1 $repo_dir 2>/dev/null | tail -1 | awk '{print $4}')
 
-        # C. Validación de accesibilidad al repositorio
+        # C. Validación de accesibilidad a las rutas por respaldar
+        if [ -z "$total_bytes" ]; then
+            log_msg "ERROR" "ID_$id" "Error de acceso: No se pudo obtener espacio para todas las rutas ($rutas)."
+            sed -i "/^\[$id\]/,/^$/ { s/^estado =.*/estado = PENDIENTE/; s/^pid =.*/pid = 0/ }" "$STATE_FILE"
+            continue
+        fi
+
+        # D. Validación de accesibilidad al repositorio
         if [ -z "$free_bytes" ]; then
             log_msg "ERROR" "ID_$id" "Error de acceso: No se pudo obtener espacio en $repo_dir. ¿Disco montado?"
             sed -i "/^\[$id\]/,/^$/ { s/^estado =.*/estado = PENDIENTE/; s/^pid =.*/pid = 0/ }" "$STATE_FILE"
             continue
         fi
 
-        margen_seguridad=$(( 1024 * 1024 * 1024 ))
-        requerido=$(( size_bytes + margen_seguridad ))
+        margen_seguridad=$(( 1024 * 1024 * 1024 )) # 1GB
+        requerido=$(( total_bytes + margen_seguridad ))
 
         # Log detallado de la validación técnica
-        log_msg "INFO" "ID_$id" "Validación: Origen($size_bytes bytes) + Margen(1GB) = Requerido($requerido). Disponible($free_bytes)."
+        log_msg "INFO" "ID_$id" "Validación: Origen($total_bytes bytes) + Margen(1GB) = Requerido($requerido). Disponible($free_bytes)."
 
         if [ "$free_bytes" -lt "$requerido" ]; then
             faltante=$(( requerido - free_bytes ))
