@@ -699,6 +699,8 @@ Para un mejor procesamiento, se tomarán medidas como:
 
 * Antes de prcesar los datos, se eliminara todo lo que venga depeues de # (comenatrio) (s/#.*$//)
 
+* Los IDS repetidos no se procesan y se le iforoma al usuario cuales IDs estan repetidos y serán ignorados. **LOG-LEVEL: WARN** (FORZAR_NOTIF=true).
+
 ---
 
 ### Formato de Salida de Log (Fase 2 Finalizada)

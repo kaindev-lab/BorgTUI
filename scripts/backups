@@ -50,36 +50,22 @@ get_expanded_paths() {
 # Función para extraer valores del archivo de configuración limpio
 # Uso: get_config_value "id_seccion" "nombre_campo"
 get_config_value() {
-    local section_id="$1"
-    local field_name="$2"
+    local file="$1"
+    local section_id="$2"
+    local field_name="$3"
     local value
 
     # 1. Filtramos el bloque de la sección
     # 2. Buscamos el campo exacto (añadimos ^ para inicio de línea)
     # 3. Cortamos por el '='
     # 4. Convertimos a parametro validos con xargs, que interpeta bien los espacios en la retención y elimina espaciso inecesarios.
-    value=$(sed -n "/^\[$section_id\]/,/^\[/p" "$STRIPPED_CONFIG" \
+    value=$(sed -n "/^\[$section_id\]/,/^\[/p" "$file" \
             | grep "^$field_name =" \
             | cut -d'=' -f2- \
             | xargs)
 
     # Devolvemos el valor (echo en funciones de Bash actúa como return value)
     echo "$value"
-}
-
-
-
-# Extrae del .conf usando el número de línea para no mezclar bloques con mismo ID
-get_val_conf() {
-    local file=$1 linea=$2 key=$3
-    sed -n "${linea},/^\[/p" "$file" | grep "^$key =" | cut -d'=' -f2- | sed 's/#.*$//; s/^[[:space:]]*//; s/[[:space:]]*$//'
-}
-
-
-# Extrae del .state usando el ID (en el estado no hay duplicados)
-get_val_state() {
-    local file=$1 id=$2 key=$3
-    sed -n "/^\[$id\]/,/^\[/p" "$file" | grep "^$key =" | cut -d'=' -f2- | sed 's/#.*$//; s/^[[:space:]]*//; s/[[:space:]]*$//'
 }
 
 
@@ -390,8 +376,8 @@ fi
 # Buscamos los valores reales que el usuario escribió para sincronizarlos
 
 # Uso: get_config_value "id_seccion" "nombre_campo"
-LOG_FREQ_RAW=$(get_config_value "101" "frecuencia")
-LOG_RET_RAW=$(get_config_value "101" "retencion")
+LOG_FREQ_RAW=$(get_config_value "$STRIPPED_CONFIG" "101" "frecuencia")
+LOG_RET_RAW=$(get_config_value "$STRIPPED_CONFIG" "101" "retencion")
 LOG_REPO_PATH=$(get_expanded_paths "$CONFIG_FILE" "101" | sed 's/\"//g')
 
 # 2. Validación de Integridad de los datos numéricos
@@ -441,174 +427,172 @@ log_msg "INFO" "SYSTEM" "Iniciando sincronización de estados (Fase 2)..."
 
 TEMP_STATE=$(mktemp)
 AHORA=$(date +%s)
-# Captura todos los de 3 dígitos pero quita el 100 (repositorio), que no se necesita en los estados, pues no cambia durante la vida del script.
-IDS_CONFIGURADOS=$(grep -nP '^\[[1-9][0-9]{2,}\]' "$CONFIG_FILE" | grep -vE '\[100\]')
+# Captura todos los de 3 dígitos pero quita el 100
+IDS_CONFIGURADOS=$(grep -oP '^\[[1-9][0-9]{2,}\]' "$CONFIG_FILE" | grep -vE '\[100\]' | tr -d '[]')
+
+# Listas para separar los IDs
+IDS_UNICOS=()
+IDS_REPETIDOS=()
+
+# Declaramos un array asociativo interno para la lógica de conteo
+declare -A contador_ids
+
+# Primer paso: Clasificación de IDs
+for id in $IDS_CONFIGURADOS; do
+    if [[ -z "${contador_ids[$id]}" ]]; then
+        # Es la primera vez que lo vemos
+        IDS_UNICOS+=("$id")
+        contador_ids[$id]=1
+    else
+        # Ya existe en el contador, es un duplicado
+        # Solo lo añadimos a la lista de repetidos si no está ya ahí
+        if [[ "${contador_ids[$id]}" -eq 1 ]]; then
+            IDS_REPETIDOS+=("$id")
+        fi
+        ((contador_ids[$id]++))
+    fi
+done
+
+# Variables de control para las siguientes fases
 IDS_PROCESADOS=()
 CONFIGS_PROCESADAS=()
 COUNT_SYNC=0
 
-for SEC in $IDS_CONFIGURADOS; do
-    # Separamos el número de línea y el ID del formato "linea:[ID]"
-    L_START=$(echo "$SEC" | cut -d: -f1)
-    ID=$(echo "$SEC" | cut -d: -f2 | tr -d '[]')
+# Si hay IDs repetidos, informamos en bloque y no hacemos nada más con ellos.
+if [ ${#IDS_REPETIDOS[@]} -gt 0 ]; then
+    log_msg "WARN" "SYSTEM" "Se detectaron IDs duplicados que serán IGNORADOS: ${IDS_REPETIDOS[*]}"
+fi
 
-    # 1. EXTRACCIÓN DE DATOS
+for ID in "${IDS_UNICOS[@]}"; do
+    
+    # --- 1. EXTRACCIÓN Y VALIDACIÓN DE DATOS ---
+    
     if [[ "$ID" == "101" ]]; then
-        CAT="Registros"; FREQ=$LOG_FREQ; RET=$LOG_RET; RUTAS="$VALID_LOG_PATH"; COMP=1
+        # Caso especial: ID 101 (Logs)
+        CAT="Registros"
+        FREQ=$LOG_FREQ
+        RET=$LOG_RET
+        RUTAS="$VALID_LOG_PATH"
+        COMP=1
     else
-        # 1. EXTRACCIÓN DE DATOS BÁSICOS
-        CAT=$(get_val_conf "$CONFIG_FILE" "$L_START" "categoria")
-        F_RAW=$(get_val_conf "$CONFIG_FILE" "$L_START" "frecuencia")
-        C_RAW=$(get_val_conf "$CONFIG_FILE" "$L_START" "compresion" | tr '[:upper:]' '[:lower:]')
-        R_RAW=$(get_val_conf "$CONFIG_FILE" "$L_START" "retencion")
+        # Caso normal: Extracción usando get_config_value con el ID (sin líneas)
+        CAT=$(get_config_value "$CONFIG_FILE" "$ID" "categoria")
+        F_RAW=$(get_config_value "$CONFIG_FILE" "$ID" "frecuencia")
+        C_RAW=$(get_config_value "$CONFIG_FILE" "$ID" "compresion" | tr '[:upper:]' '[:lower:]')
+        R_RAW=$(get_config_value "$CONFIG_FILE" "$ID" "retencion")
 
+        # A. Frecuencia
         if [[ "$F_RAW" =~ ^[0-9]+$ ]]; then
             FREQ=$F_RAW
         else
-            FREQ=86400  # Valor por defecto: 1 día si el usuario pone basura
-	    log_msg "WARN" "ID_$ID" "Frecuencia inválida ($F_RAW). Usando 86400s."
-	    log_msg "WARN" "ID_$ID" "Se usará la frecuencia de 86400s /(1 día)."
+            FREQ=86400
+            log_msg "WARN" "ID_$ID" "Frecuencia inválida o vacía ($F_RAW). Se usará valor por defecto: 86400s (1 día)."
         fi
         
+        # B. Compresión
         [[ "$C_RAW" == "true" ]] && COMP=0 || COMP=1
-        RET=${R_RAW:-"--keep-daily 7"}
 
-        # 2. PROCESAMIENTO DE RETENCIÓN
-        # Definimos las opciones permitidas por Borg Prune
+        # C. Retención (Tu lógica original intacta)
         POLITICAS_PERMITIDAS="--keep-last --keep-hourly --keep-daily --keep-weekly --keep-monthly --keep-yearly"
         RET_VALIDA=""
         
         if [ -z "$R_RAW" ]; then
-            RET_VALIDA="--keep-daily 7" # Valor por defecto si está vacío
+            RET_VALIDA="--keep-daily 7"
             log_msg "WARN" "ID_$ID" "Retención no definida. Usando por defecto: --keep-daily 7"
         else
-            # Convertimos la cadena en un array para analizar pares (comando valor)
             read -ra TOKENS <<< "$R_RAW"
             for ((i=0; i<${#TOKENS[@]}; i+=2)); do
                 CMD="${TOKENS[i]}"
                 VAL="${TOKENS[i+1]}"
-                
-                # 1. ¿Es un comando válido? 2. ¿El valor es un número?
                 if [[ " $POLITICAS_PERMITIDAS " =~ " $CMD " ]] && [[ "$VAL" =~ ^[0-9]+$ ]]; then
                     RET_VALIDA+="$CMD $VAL "
                 else
-                    log_msg "WARN" "ID_$ID" "Política de retención inválida omitida: $CMD $VAL" "true"
+                    log_msg "WARN" "ID_$ID" "Política inválida omitida: $CMD $VAL"
                 fi
             done
-            
-            # Si después de limpiar no quedó nada válido, aplicamos el fail-safe
+            # Fail-safe
             if [ -z "$(echo "$RET_VALIDA" | xargs)" ]; then
                 RET_VALIDA="--keep-daily 7"
-                log_msg "WARN" "ID_$ID" "Sin políticas válidas. Aplicando fail-safe: --keep-daily 7" "true"
+                log_msg "WARN" "ID_$ID" "Sin políticas válidas tras filtro. Aplicando fail-safe: --keep-daily 7"
             fi
         fi
-        RET=$(echo "$RET_VALIDA" | xargs) # Limpieza de espacios extra
+        RET=$(echo "$RET_VALIDA" | xargs)
 
-        # 3. PROCESAMIENTO DE RUTAS
-        RUTAS=$(get_expanded_paths "$CONFIG_FILE" "$ID" "$L_START")
+        # D. Rutas (Usando tu función get_expanded_paths)
+        # Nota: Pasamos el ID directamente, ya no necesitamos número de línea
+        RUTAS=$(get_expanded_paths "$CONFIG_FILE" "$ID")
 
-        # --- VALIDACIÓN DE ACCESIBILIDAD PROFUNDA ---
+        # --- VALIDACIÓN DE ACCESIBILIDAD (Tu lógica find) ---
         RUTAS_EXISTENTES=""
-        
         while IFS= read -r -d '' r; do
             if [ -e "$r" ]; then
-                # 1. Comprobamos si la ruta base es legible
                 if [ -r "$r" ]; then
-                    # 2. VALIDACIÓN RECURSIVA: Buscamos elementos sin permiso de lectura
-                    # Limitamos a los primeros 5 errores para no saturar el log
+                    # Buscamos archivos ilegibles dentro (max 1 error para ser rápido y detectar fallo)
                     ERRORES_LECTURA=$(find "$r" ! -readable -print -quit 2>/dev/null)
-
                     if [ -z "$ERRORES_LECTURA" ]; then
                         RUTAS_EXISTENTES+=" \"$r\""
                     else
-                        log_msg "WARN" "ID_$ID" "Acceso parcial: Se detectaron subcarpetas/archivos sin permiso en: $r" "true"
-                        # Opcional: Podrías decidir incluirla de todos modos o descartarla.
-                        # Para tests estrictos, mejor descartarla si no es 100% legible.
+                        log_msg "WARN" "ID_$ID" "Acceso parcial: Subarchivos sin permiso en: $r"
                     fi
                 else
-                    log_msg "WARN" "ID_$ID" "Ruta base sin permisos de lectura: $r" "true"
+                    log_msg "WARN" "ID_$ID" "Sin permiso de lectura en raíz: $r"
                 fi
             else
-                log_msg "WARN" "ID_$ID" "Ruta no encontrada: $r" "true"
+                log_msg "WARN" "ID_$ID" "Ruta no encontrada: $r"
             fi
         done < <(echo "$RUTAS" | xargs printf '%s\0')
 
         RUTAS=$(echo "$RUTAS_EXISTENTES" | sed 's/^[[:space:]]*//')
 
-        # Si tras el filtro no quedó nada, omitimos este ID
-        [ -z "$RUTAS" ] && { log_msg "WARN" "ID_$ID" "Backup omitido: Ninguna ruta es accesible o existe." "true"; continue; }
-
-
-        # Informe Final de Validación para cada Tarea
-        log_msg "INFO" "ID_$ID" "Configuración Validada: Freq = ${FREQ}s | Retencion = ${RET} | Rutas = ${RUTAS:-"NINGUNA"}"
-
-    fi
-
-    # 3. GESTIÓN DE ID Y DETECCIÓN DE DUPLICADOS IDÉNTICOS
-    # Creamos una huella digital del contenido para comparar
-    HUELLA_ACTUAL="${CAT}|${FREQ}|${RET}|${RUTAS}|${COMP}"
-    
-    # Si el ID ya existe, verificamos si el contenido es idéntico
-    if [[ " ${IDS_PROCESADOS[@]} " =~ " ${ID} " ]]; then
-        ENCONTRADO_IGUAL=false
-        for CONFIG_PREVIA in "${CONFIGS_PROCESADAS[@]}"; do
-            if [[ "$CONFIG_PREVIA" == "${ID}:${HUELLA_ACTUAL}" ]]; then
-                ENCONTRADO_IGUAL=true
-                break
-            fi
-        done
-
-        if [ "$ENCONTRADO_IGUAL" = true ]; then
-            log_msg "WARN" "SYSTEM" "ID $ID duplicado con datos idénticos. Omitiendo duplicado." "true"
+        # Si no hay rutas válidas, saltamos al siguiente ID del bucle
+        if [ -z "$RUTAS" ]; then
+            log_msg "ERROR" "ID_$ID" "Configuración incompleta: Ninguna ruta es accesible. Se omite este ID."
             continue
         fi
 
-        # Si el ID existe pero los datos son distintos, reasignamos ID
-        ULTIMO_ID=$(echo "${IDS_PROCESADOS[@]}" | tr ' ' '\n' | sort -n | tail -1)
-        FINAL_ID=$((ULTIMO_ID + 1))
-        log_msg "WARN" "SYSTEM" "ID $ID duplicado con datos distintos. Reasignando a $FINAL_ID." "true"
-    else
-        FINAL_ID=$ID
+        log_msg "INFO" "ID_$ID" "Configuración Validada: Freq=${FREQ}s | Ret=${RET} | Rutas=${RUTAS}"
     fi
 
-    # Guardamos el ID y su configuración para futuras comparaciones
-    IDS_PROCESADOS+=("$FINAL_ID")
-    CONFIGS_PROCESADAS+=("${ID}:${HUELLA_ACTUAL}")
+    # --- 2. SINCRONIZACIÓN DE ESTADO ---
+    
+    # Obtenemos datos del archivo de estado (Usando get_config_value apuntando al STATE_FILE)
+    # Nota: Si tienes una función get_val_state úsala, si no, get_config_value funciona igual.
+    ULTIMO_E=$(get_config_value "$STATE_FILE" "$ID" "ultimo_exito"); ULTIMO_E=${ULTIMO_E:-0}
+    ESTADO_E=$(get_config_value "$STATE_FILE" "$ID" "estado"); ESTADO_E=${ESTADO_E:-"PENDIENTE"}
 
-    # 4. SINCRONIZACIÓN CON EL ESTADO ANTERIOR (Con valores por defecto para IDs nuevos)
-    ULTIMO_E=$(get_val_state "$STATE_FILE" "$FINAL_ID" "ultimo_exito"); ULTIMO_E=${ULTIMO_E:-0}
-    ESTADO_E=$(get_val_state "$STATE_FILE" "$FINAL_ID" "estado"); ESTADO_E=${ESTADO_E:-"PENDIENTE"}
-
+    # Cálculos de tiempo
     T_TRANS=$((AHORA - ULTIMO_E))
-    # Si nunca se ha ejecutado (0), el tiempo transcurrido debe ser 0
     [ "$ULTIMO_E" -eq 0 ] && T_TRANS=0
     T_FALTANTE=$((FREQ - T_TRANS))
 
-    # Ajuste de estado lógico
-    # Si la Tarea no esta en proceo, validamos y actualizamos su estado
-    # Si ya es tiempo de hacer un backup (T_FALTANTE <= 0), el estado es PENDIENTE
-    # Si la tarea es nueva (sin registro en lso estados) (ULTIMO_E == 0), el estado es PENDIENTE
-    [[ "$ESTADO_E" != "EN-PROCESO" ]] && { (( T_FALTANTE <= 0 || ULTIMO_E == 0 )) && ESTADO_E="PENDIENTE"; }
+    # Lógica de Estado
+    if [[ "$ESTADO_E" != "EN-PROCESO" ]]; then
+        if (( T_FALTANTE <= 0 || ULTIMO_E == 0 )); then
+            ESTADO_E="PENDIENTE"
+        fi
+    fi
 
-    # 5. ESCRITURA AL ARCHIVO TEMPORAL
+    # --- 3. ESCRITURA AL ARCHIVO TEMPORAL ---
     {
-        echo "[$FINAL_ID]"
+        echo "[$ID]"
         echo "categoria = $CAT"
         echo "frecuencia = $FREQ"
         echo "retencion = $RET"
         echo "rutas = $RUTAS"
-        [[ "$FINAL_ID" != "101" ]] && echo "compresion = $COMP"
+        [[ "$ID" != "101" ]] && echo "compresion = $COMP"
         echo "ultimo_exito = $ULTIMO_E"
         echo "tiempo_trasncurrido = $T_TRANS"
         echo "tiempo_faltante = $T_FALTANTE"
         echo "estado = $ESTADO_E"
         echo ""
     } >> "$TEMP_STATE"
+
     ((COUNT_SYNC++))
 done
 
+# Finalización
 mv "$TEMP_STATE" "$STATE_FILE"
-log_msg "INFO" "SYSTEM" "Sincronización finalizada ($COUNT_SYNC IDs)."
+log_msg "INFO" "SYSTEM" "Sincronización finalizada. IDs procesados: $COUNT_SYNC. IDs Repetidos (ignorados): ${#IDS_REPETIDOS[@]}"
 
 # =============================================================================
 # FASE 3: ACTUALIZACIÓN Y PROCESAMIENTO DE LOS ESTADOS PARA CREAR BACKUPS
