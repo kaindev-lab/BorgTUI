@@ -255,9 +255,9 @@ compresión = # N/A No comprime los registros por defecto.
 rutas = ~/Backups/Borg-Backups/Checks
 
 
-[104] # Sin asignar
+# [104] Sin asignar
 
-[105] # Sin asignar
+# [105] Sin asignar
 
 # =============================================================================
 # SECCIÓN 2: TAREAS DE RESPALDO DE USUARIO (ID 106 en adelante)
@@ -454,10 +454,6 @@ for id_check in 102 103; do
 
     # 1. Extracción de valores
     C_FREQ_RAW=$(get_config_value "$STRIPPED_CONFIG" "$id_check" "frecuencia")
-    echo "[AUD1]: AL BUCAR LA FRECUENIA PARA EL ID_$id_check EL RESULTADO FUE ($C_FREQ_RAW)"
-    printf "[AUD2]: EN EL ARCHIVO DE CONFIGURACIONES TEMPORALES SE ENCUENTRA ESTO:\n$"
-    echo "STRIPPED_CONFIG APUNTA A: ($STRIPPED_CONFIG) Y SU CONTENIDO ES:"
-    cat "$STRIPPED_CONFIG"
     C_RET_RAW=$(get_config_value "$STRIPPED_CONFIG" "$id_check" "retencion")
     C_REPAIR_RAW=$(get_config_value "$STRIPPED_CONFIG" "$id_check" "reparar" | tr '[:upper:]' '[:lower:]')
     C_PATH_RAW=$(get_expanded_paths "$CONFIG_FILE" "$id_check" | sed 's/\"//g')
@@ -559,19 +555,41 @@ if [ ${#IDS_REPETIDOS[@]} -gt 0 ]; then
     log_msg "WARN" "SYSTEM" "Se detectaron IDs duplicados que serán IGNORADOS: ${IDS_REPETIDOS[*]}"
 fi
 
+
 for ID in "${IDS_UNICOS[@]}"; do
     
     # --- 1. EXTRACCIÓN Y VALIDACIÓN DE DATOS ---
-    
-    if [[ "$ID" == "101" ]]; then
-        # Caso especial: ID 101 (Logs)
+
+    if [[ "$ID" == "102" || "$ID" == "103" ]]; then
+        # ---------------------------------------------------------------------
+        # CASO ESPECIAL: IDs 102 y 103 (Chequeos de Sistema)
+        # ---------------------------------------------------------------------
+        [ "$ID" == "102" ] && CAT="Chequeo Rápido" || CAT="Chequeo Profundo"
+        
+        # Recuperamos las variables dinámicas del Nivel 5 usando indirección
+        eval "FREQ=\$CHECK_FREQ_$ID"
+        eval "RET=\$CHECK_RET_$ID"
+        eval "RUTAS=\$CHECK_PATH_$ID"  # Ruta de históricos
+        eval "REPARAR=\$CHECK_REPAIR_$ID"
+        COMP=1 # No aplica compresión para chequeos
+        
+        # IMPORTANTE: No ejecutamos la validación de 'find' porque no son rutas de origen
+
+    elif [[ "$ID" == "101" ]]; then
+        # ---------------------------------------------------------------------
+        # CASO ESPECIAL: ID 101 (Logs/Bitácora)
+        # ---------------------------------------------------------------------
         CAT="Registros"
         FREQ=$LOG_FREQ
         RET=$LOG_RET
         RUTAS="$VALID_LOG_PATH"
         COMP=1
+        
     else
-        # Caso normal: Extracción usando get_config_value con el ID (sin líneas)
+        # ---------------------------------------------------------------------
+        # CASO NORMAL: IDs 106+ (Tareas de Usuario)
+        # ---------------------------------------------------------------------
+    
         CAT=$(get_config_value "$STRIPPED_CONFIG" "$ID" "categoria")
         F_RAW=$(get_config_value "$STRIPPED_CONFIG" "$ID" "frecuencia")
         C_RAW=$(get_config_value "$STRIPPED_CONFIG" "$ID" "compresion" | tr '[:upper:]' '[:lower:]')
@@ -822,7 +840,7 @@ else
             cat=$(grep -A 1 "^\[$id\]" "$STATE_FILE" | grep "^categoria =" | cut -d'=' -f2- | xargs)
 
         # ---------------------------------------------------------------------
-        # CASO ESPECIAL: MANTENIMIENTO DE LOGS (ID 101)
+        # CASO ESPECIAL 1: MANTENIMIENTO DE LOGS (ID 101)
         # ---------------------------------------------------------------------
         if [[ "$id" == "101" ]]; then
             log_msg "INFO" "SYSTEM" "Iniciando mantenimiento de registros (ID 101)"
@@ -869,6 +887,103 @@ else
             continue # Finalizar procesamiento del ID 101
         fi
     
+    
+        # ---------------------------------------------------------------------
+        # CASO ESPECIAL 2: CHEQUEOS DE INTEGRIDAD (ID 102 y 103)
+        # ---------------------------------------------------------------------
+        if [[ "$id" == "102" || "$id" == "103" ]]; then
+            
+            # 1. Configuración de variables específicas
+            # Nota: En la Fase 2 guardamos la ruta de históricos en el campo 'rutas' para estos IDs
+            log_path=$(grep -A 9 "^\[$id\]" "$STATE_FILE" | grep "^rutas =" | cut -d'=' -f2- | xargs)
+            retencion=$(grep -A 9 "^\[$id\]" "$STATE_FILE" | grep "^retencion =" | awk '{print $3}')
+            reparar_bool=$(grep -A 9 "^\[$id\]" "$STATE_FILE" | grep "^reparar =" | awk '{print $3}')
+            
+            # Definir tipo de chequeo
+            if [ "$id" == "102" ]; then
+                TYPE_TAG="FAST"
+                BORG_OPTS="--repository-only" # Chequeo rápido (solo estructura repo)
+                MSG_TYPE="Rápido"
+            else
+                TYPE_TAG="DEEP"
+                BORG_OPTS="" # Chequeo profundo (verifica archivos y chunks)
+                MSG_TYPE="Profundo"
+            fi
+
+            log_msg "INFO" "SYSTEM" "Iniciando Chequeo $MSG_TYPE (ID $id)"
+
+            # Validar que existe la carpeta de logs
+            if [ ! -d "$log_path" ]; then
+                log_msg "ERROR" "ID_$id" "Ruta de históricos no encontrada ($log_path). Creándola..."
+                mkdir -p "$log_path"
+            fi
+
+            # 2. Ejecución del Chequeo
+            TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+            LOG_FILE_CHECK="$log_path/check_ID_${TYPE_TAG}_${TIMESTAMP}.log"
+            
+            log_msg "INFO" "ID_$id" "Ejecutando Borg Check... Salida en: $LOG_FILE_CHECK"
+            
+            # Ejecutamos y capturamos salida tanto en archivo como en variable para evaluar
+            # Usamos 2>&1 para capturar errores también
+            borg check $BORG_OPTS "$repo_dir" > "$LOG_FILE_CHECK" 2>&1
+            CHECK_EXIT=$?
+
+            # 3. Evaluación de Resultados
+            if [ $CHECK_EXIT -eq 0 ]; then
+                log_msg "INFO" "ID_$id" "Chequeo finalizado con ÉXITO. Integridad verificada."
+                
+                # Actualizar estado a REALIZADO
+                ahora_unix=$(date +%s)
+                sed -i "/^\[$id\]/,/^$/ { s/^estado =.*/estado = REALIZADO/; s/^ultimo_exito =.*/ultimo_exito = $ahora_unix/ }" "$STATE_FILE"
+
+            else
+                log_msg "ERROR" "ID_$id" "Problemas detectados durante el chequeo (Exit Code: $CHECK_EXIT). Ver detalle en logs."
+                
+                # 4. Lógica de Reparación (Solo si falló y está activado)
+                # Asumimos que 0 = true (reparar) según tu lógica anterior de "Normalización Binaria", 
+                # o 1 = true. Ajusta según tu script. Aquí asumo 1 = True (activado).
+                if [ "$reparar_bool" -eq 1 ]; then 
+                    log_msg "WARN" "ID_$id" "Modo de Auto-Reparación ACTIVADO. Intentando reparar..."
+                    
+                    FIX_LOG="$log_path/repair_ID_FIX_${TIMESTAMP}.log"
+                    
+                    borg check --repair "$repo_dir" > "$FIX_LOG" 2>&1
+                    REPAIR_EXIT=$?
+                    
+                    if [ $REPAIR_EXIT -eq 0 ]; then
+                        log_msg "INFO" "ID_$id" "Reparación completada con éxito."
+                        # Marcamos como realizado aunque hubo reparación
+                        ahora_unix=$(date +%s)
+                        sed -i "/^\[$id\]/,/^$/ { s/^estado =.*/estado = REALIZADO/; s/^ultimo_exito =.*/ultimo_exito = $ahora_unix/ }" "$STATE_FILE"
+                    else
+                        log_msg "CRITIC" "ID_$id" "LA REPARACIÓN AUTOMÁTICA FALLÓ. Intervención manual requerida."
+                        # Dejamos en PENDIENTE o podríamos poner un estado ERROR
+                        sed -i "/^\[$id\]/,/^$/ { s/^estado =.*/estado = PENDIENTE/ }" "$STATE_FILE"
+                    fi
+                else
+                    log_msg "WARN" "ID_$id" "Reparación desactivada en configuración. No se tomaron acciones correctivas."
+                    # Marcamos PENDIENTE para que se reintente o alerte
+                    sed -i "/^\[$id\]/,/^$/ { s/^estado =.*/estado = PENDIENTE/ }" "$STATE_FILE"
+                fi
+            fi
+
+            # 5. Rotación de Logs de Chequeo (Pruning Local)
+            # Solo rotamos los archivos del tipo actual (FAST o DEEP), no los FIX
+            log_msg "INFO" "ID_$id" "Aplicando retención de históricos: $retencion archivos."
+            
+            count_logs=$(ls -1 "$log_path"/check_ID_${TYPE_TAG}_*.log 2>/dev/null | wc -l)
+            
+            if [ "$count_logs" -gt "$retencion" ]; then
+                to_delete=$((count_logs - retencion))
+                # Listar por fecha (más viejo primero), tomar los N sobrantes y borrar
+                ls -1tr "$log_path"/check_ID_${TYPE_TAG}_*.log 2>/dev/null | head -n "$to_delete" | xargs -d '\n' rm -f
+                log_msg "INFO" "ID_$id" "Se eliminaron $to_delete registros antiguos."
+            fi
+
+            continue # Importante: Saltar al siguiente ID para no ejecutar backup normal
+        fi
+
         # ---------------------------------------------------------------------
         # CASO NORMAL: RESPALDO CON BORG (ID 102+)
         # ---------------------------------------------------------------------
