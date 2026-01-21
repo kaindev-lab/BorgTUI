@@ -694,6 +694,12 @@ for ID in "${IDS_UNICOS[@]}"; do
         echo "retencion = $RET"
         echo "rutas = $RUTAS"
         [[ "$ID" != "101" ]] && echo "compresion = $COMP"
+
+        # Escribimos reparar SOLO para IDs 102 y 103
+        if [[ "$ID" == "102" || "$ID" == "103" ]]; then
+            echo "reparar = ${REPARAR:-0}"
+        fi
+
         echo "ultimo_exito = $ULTIMO_E"
         echo "tiempo_trasncurrido = $T_TRANS"
         echo "tiempo_faltante = $T_FALTANTE"
@@ -744,7 +750,7 @@ sync_state_times() {
             nuevo_estado="PENDIENTE"
         fi
         #Pasa a PENDIENTE si estado es EN-PROCESO (el proceso anterior no se termino correctamente)
-        if [ $faltante -le 0 ]; then
+        if [[ "$estado" == "EN-PROCESO" ]]; then
             log_msg "ERROR" "ID_$id" "Se detecto un proceso de backup que no termino correctamente en el anterior ciclo"
             nuevo_estado="PENDIENTE"
         fi
@@ -762,6 +768,13 @@ sync_state_times() {
         if [[ "$estado" == "REALIZADO" ]] && [ $faltante -le 0 ]; then
             nuevo_estado="PENDIENTE"
         fi	
+
+        # A. VALIDACIÓN DE INTEGRIDAD: Estado desconocido o vacío
+	# Si el estado no es uno de los tres permitidos, lo forzamos a PENDIENTE
+	if [[ ! "$estado" =~ ^(REALIZADO|PENDIENTE|EN-PROCESO)$ ]]; then
+	    log_msg "WARN" "ID_$id" "Estado inválido detectado ('$estado'). Reestableciendo a PENDIENTE."
+	    nuevo_estado="PENDIENTE"
+	fi
 
         # 4. Actualización Multicampo en .state
         # Usamos sed para buscar el bloque del ID y sustituir los 3 valores
@@ -839,6 +852,9 @@ else
     for id in $queue; do
             cat=$(grep -A 1 "^\[$id\]" "$STATE_FILE" | grep "^categoria =" | cut -d'=' -f2- | xargs)
 
+	# Obtenemos el repositorio sobre el que se va a trabajar
+	repo_dir=$(get_expanded_paths "$STRIPPED_CONFIG" "100" | sed 's/\"//g') #la ruta viene con comillas en state y da problemas con borg, pro eso se eliminan	    
+
         # ---------------------------------------------------------------------
         # CASO ESPECIAL 1: MANTENIMIENTO DE LOGS (ID 101)
         # ---------------------------------------------------------------------
@@ -899,14 +915,14 @@ else
             retencion=$(grep -A 9 "^\[$id\]" "$STATE_FILE" | grep "^retencion =" | awk '{print $3}')
             reparar_bool=$(grep -A 9 "^\[$id\]" "$STATE_FILE" | grep "^reparar =" | awk '{print $3}')
             
-            # Definir tipo de chequeo
+            # Definir tipo de chequeo. Siempre con la opción de --verbose para dejar registrado el proceso.
             if [ "$id" == "102" ]; then
                 TYPE_TAG="FAST"
-                BORG_OPTS="--repository-only" # Chequeo rápido (solo estructura repo)
+                BORG_OPTS="--verbose" # Chequeo rápido (opción predetermianda de borg sin opciones extras).
                 MSG_TYPE="Rápido"
             else
                 TYPE_TAG="DEEP"
-                BORG_OPTS="" # Chequeo profundo (verifica archivos y chunks)
+                BORG_OPTS="--verbose --verify-data" # Chequeo profundo (verifica archivos y chunks)
                 MSG_TYPE="Profundo"
             fi
 
@@ -968,7 +984,7 @@ else
                 fi
             fi
 
-            # 5. Rotación de Logs de Chequeo (Pruning Local)
+            # 4. Rotación de Logs de Chequeo (Pruning Local)
             # Solo rotamos los archivos del tipo actual (FAST o DEEP), no los FIX
             log_msg "INFO" "ID_$id" "Aplicando retención de históricos: $retencion archivos."
             
@@ -981,6 +997,10 @@ else
                 log_msg "INFO" "ID_$id" "Se eliminaron $to_delete registros antiguos."
             fi
 
+                # Actualizar estado a REALIZADO
+                ahora_unix=$(date +%s)
+		sed -i "/^\[$id\]/,/^$/ { s/^estado =.*/estado = REALIZADO/; s/^ultimo_exito =.*/ultimo_exito = $ahora_unix/ }" "$STATE_FILE"
+
             continue # Importante: Saltar al siguiente ID para no ejecutar backup normal
         fi
 
@@ -989,7 +1009,6 @@ else
         # ---------------------------------------------------------------------
 
 	rutas=$(get_expanded_paths "$STATE_FILE" "$id")
-	repo_dir=$(get_expanded_paths "$STRIPPED_CONFIG" "100" | sed 's/\"//g') #la ruta viene con comillas en state y da problemas con borg, pro eso se eliminan	    
 
         log_msg "INFO" "SYSTEM" "Iniciando proceso para ID: $id ($cat)"
 
