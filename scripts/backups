@@ -219,30 +219,48 @@ if [[ ! -f "$CONFIG_FILE" || ! -s "$CONFIG_FILE" ]]; then
 # -----------------------------------------------------------------------------
 
 # =============================================================================
-# SECCIÓN 1: CONFIGURACIÓN DEL SISTEMA (IDs 100 y 101)
+# SECCIÓN 1: CONFIGURACIÓN DEL SISTEMA (IDs 100 al 105)
 # =============================================================================
 
 [100]
-categoria = Repositorio Principal de Datos
+categoria = Repositorio
 # El destino físico donde se almacenarán todas las copias de seguridad.
 # Si la carpeta no existe, el script intentará crearla.
 rutas = ~/Backups/Borg-Backups/Repository
 encryption = none
 
 [101]
-categoria = Historial y Rotación de Logs
+categoria = Bitacora
 # Frecuencia: Cada cuánto tiempo comprimir el log actual (Ej: 2592000 = 1 mes).
-frecuencia = 2592000
+frecuencia = 2592000 # Cada mes
 # Retención: Cuántos archivos .zip históricos conservar en la carpeta de logs.
 retencion = 12
 # Ruta: Carpeta donde se guardarán los .zip (Si se deja vacío, el log se limpia pero no se guarda).
 rutas = ~/Backups/Borg-Backups/Logs
 
+[102]
+categoria = Chequeos Rapidos
+Frecuencia = 604800 #Cada semana
+retention = 52  #Guarda los registros de 1 año (52 semanas)
+Reparar = (True|Falase) # Establece si hacer reparaciones automaticas (True) o manuales (False)
+#compresión = N/A No comprime los registros por defecto.
+
+[103]
+categoria = Chequeos Profundos
+Frecuencia = 2592000 # Cada mes
+retention = 12  #Guarda los registros de 1 año (12 meses)
+Reparar = (True|Falase) # Establece si hacer reparaciones automaticas (True) o manuales (False)
+#compresión = N/A No comprime los registros por defecto.
+
+[104] # Sin asignar
+
+[105] # Sin asignar
+
 # =============================================================================
-# SECCIÓN 2: TAREAS DE RESPALDO DE USUARIO (ID 102 en adelante)
+# SECCIÓN 2: TAREAS DE RESPALDO DE USUARIO (ID 106 en adelante)
 # =============================================================================
 # INSTRUCCIONES:
-# 1. ID: Debe ser único y empezar en 102.
+# 1. ID: Debe ser único y empezar desde el ID 106.
 # 2. RUTAS: Separadas por espacios. 
 #    - Usa comillas para nombres con espacios: "/home/user/Mi Carpeta"
 #    - El símbolo '~' funciona fuera de comillas: ~/Documentos
@@ -256,7 +274,7 @@ rutas = ~/Backups/Borg-Backups/Logs
 #    Ejemplo de combinación: --keep-last 5 --keep-daily 7 --keep-monthly 2
 # -----------------------------------------------------------------------------
 
-#[102]
+#[106]
 #categoria = Documentos y Proyectos
 #frecuencia = 3600
 #rutas = ~/Documents "/home/usuario/Proyectos Especiales"
@@ -264,6 +282,7 @@ rutas = ~/Backups/Borg-Backups/Logs
 #compression = True
 
 # >>> AÑADE TUS NUEVAS CATEGORÍAS A PARTIR DE AQUÍ <<<
+
 EOF
 
     log_msg "WARN" "SYSTEM" "Archivo de configuración creado con plantilla. Edítelo antes de continuar." "true"

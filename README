@@ -12,7 +12,7 @@
 
 ### ¿Qué es BorgTUI?
 
-BorgTUI es un orquestador interactivo para backups, que hace más accesible y confiables los respaldos en uno de los motores de backups más potentes y probados en la actualidad (BorgBackups). Diseñado para la persona que desean o necesitan tener sus datos en seguros y respaldados, sea un PC personal, un servidor o cualquier otro dispositivo con un sistema Linux integrado. No es un “ponlo a correr y olvídate”: su propósito es que puedas operar, supervisar y confiar en que tus backups se realizan de forma simple, rápida y segura.
+BorgTUI es un orquestador interactivo para backups, que hace más accesible y confiables los respaldos en uno de los motores de backups más potentes y probados en la actualidad (BorgBackups). Diseñado para la persona que desean o necesitan tener sus datos en seguros y respaldados, sea un PC personal, un servidor o cualquier otro dispositivo con un sistema Linux integrado. No es un “ponlo a correr y olvídate”: su propósito es que puedas operar, supervisar y confiar en que tus backups se realizan de forma segura. Puedes automatizar los backups y los chequeos, todo de forma simple e intuitiva. 
 
 ### ¿Por qué se creo este proyecto?
 
@@ -27,11 +27,22 @@ Hay mcuhas herramientas para gestionar backups, algunas Interfaz Grafica de Usua
 
 Los backups solo valen si sabes que funcionan. BorgTUI evita la falsa tranquilidad de procesos silenciosos que fallan en secreto: desde el primer momento el operador debe entender qué está pasando, recibir avisos claros cuando algo no funciona y disponer de herramientas sencillas para investigar y corregir problemas. La prioridad es garantizar confianza operacional, no solo ejecutar tareas en segundo plano.
 
+
 ### Pilares fundamentales
 
 **Simple:** Configuración y uso pensados para ser directos; menos fricción significa menos errores humanos.
 
-**Intuitivo:** Interfaz y mensajes diseñados para personas: explicaciones legibles, consultas rápidas y una vista central que facilita la supervisión y la toma de decisiones.
+* Una configuración simple y facil de entender.
+
+* Una logica del sistema enfocada en la simpleza funcional, con una documenatción ordenado y dividido por seccioen sy objetivos.
+
+**Intuitivo:** Interfaz y mensajes diseñados para personas.
+
+* Explicaciones legibles, consultas rápidas y una vista central que facilita la supervisión y la toma de decisiones.
+
+* Cuenta con una interfaz de usuario en la terminal (TUI) par facilitar la interacción cone l sisrtema.
+
+* Retroalimentación constante y gumana para saber que pasa y por qué.
 
 **Seguro / Resiliente:** 
 
@@ -40,6 +51,8 @@ Los backups solo valen si sabes que funcionan. BorgTUI evita la falsa tranquilid
 * Comportamiento defensivo frente a errores humanos: cuando algo falla, el sistema informa de forma comprensible, registra lo ocurrido y facilita la corrección. 
 
 * Incluye validaciones y correcciones de seguridad:  valida acceso a los datos por respaldar, configuraciones válidas, comprobación de espacio en disco antes de realizar los backups, manejo de valores de emergencia para políticas de rotación, frecuencia y compresión cuando estos datos no son válidos o no sé específican.
+
+* Puedes programar chequeos constantes para verificar la integridad de los datos y detectar lkos problemas a tiempo. Los discos y herramienats de almacenamiento con el tiempo pueden fallar. Las revisiones de integridad evitan cosas como necesitar datos de un repaldo y al intentar recupeararlos, darse cuenta que ya no es accesible porque el disco se deterioro y nadie se dioc uenta.
 
 
 ### Manejo de errores parciales (NO es un todo o nada)
@@ -54,20 +67,27 @@ BorgTUI NO aplica una regla de “todo o nada” para la lista de archivos y dir
 
 **Los directorios y archivos individuales si son un todo o nada:** el motor BorgBackups si usa la politica de "todo o nada" en los backups, si ocurre un problema en la creación del backup, el backup no se crea incompleto, solo se crean los backus si todo sale bien. 
 
-### Qué ofrece
+
+### Enfoque de diseño
+
+BorgTUI automatiza las tareas que deben automatizarse, pero evita la automatización ciega: favorece la transparencia, la trazabilidad y la rapidez para diagnosticar y corregir problemas. Los backups se ejecutan automáticamente, registran su actividad y notifican al usuario cuando se requiere atención.
+
+
+### Qué ofrece (SECCIONAR PARA COMBINAR CON EL TEMA DE LOS PILARES)
+
+Automatización de los respaldos y revisiones de las tareas, archivos y directorisoq ue se configuren.
+
+Rotación de los backups con politicas efectivas como guardar un backup de cada día y las ultimas 4 backups realizados recientemenete del día actual.
 
 Visibilidad inmediata del estado de los respaldos sin necesidad de consultar cientos de logs en intentar entender que está bien y que está mal, que se respaldo y que no; puedes consultarlo todo en un mismo lugar (panel/TUI).
 
 Mensajes humanos y accionables que explican qué falló y por qué (no códigos crípticos como error125).
 
+Una interfaz de usuario en la terminal (TUI), para interactuar cone l sistema con comodidad, cambiar configuraciones, rvisar los estados, ejecutar los programas.
+
 Capacidad para actuar y corregir desde una sola interfaz: revisar estados, ejecutar acciones y consultar información relevante sin buscar en múltiples archivos.
 
-Notificaciones y avisos para que no te enteres del fallo cuando ya sea demasiado tarde.
-
-
-### Enfoque de diseño
-
-BorgTUI automatiza las tareas que deben automatizarse, pero evita la automatización ciega: favorece la transparencia, la trazabilidad y la rapidez para diagnosticar y corregir problemas. Los backups se ejecutan automáticamente, registran su actividad y notifican al usuario cuando se requiere atención.
+Notificaciones y avisos para que no enterarse del del fallo cuando ya sea demasiado tarde.
 
 
 ---
@@ -76,7 +96,7 @@ BorgTUI automatiza las tareas que deben automatizarse, pero evita la automatizac
 
 ### 2.1 Estrategia de Encriptación: Eficiencia vs. Complejidad
 
-Para la versión inicial, se ha optado por un sistema **sin encriptación de repositorio (Modo `none`)**. Esta decisión se basa en un análisis de costo-beneficio para el entorno de trabajo actual:
+Para la **versión inicial**, se ha optado por un sistema **sin encriptación de repositorio (Modo `none`)**. Esta decisión se basa en un análisis de costo-beneficio para el entorno de trabajo actual:
 
 * **Naturaleza de los Datos:** El sistema está diseñado para respaldar el datos con cambios como los datos en `HOME`, proyectos en curso y archivos que, por sí mismos, no contienen información sensible o ya cuentan con sus propias capas de seguridad.
 * **Automatización sin Interrupciones:** La encriptación en backups automáticos presenta un dilema de seguridad: o se requiere intervención humana constante para introducir la clave, o se guarda la contraseña en el sistema (lo cual anula gran parte del beneficio de seguridad).
@@ -92,8 +112,8 @@ Para la versión inicial, se ha optado por un sistema **sin encriptación de rep
 Este sistema es fundamental para:
 
 1. **Flujos de trabajo intensivos:** Donde cada minuto de avance cuenta (programación, diseño, redacción).
-2. **Datos Personales Dinámicos:** Fotos, notas y configuraciones que cambian diariamente.
-3. **Usuarios que buscan "Paz Mental":** Delegar la tarea repetitiva de la copia de seguridad a un proceso automático que garantiza que los datos siempre estén ahí.
+2. **Datos Personales Dinámicos:** Fotos, notas y configuraciones que cambian a menudo.
+3. **Usuarios que buscan "Paz Mental":** Delegar la tarea repetitiva de la copia de seguridad a un proceso automático que garantiza que los datos siempre estén ahí cuando se necesiten.
 
 ---
 
@@ -103,7 +123,7 @@ Se ejecutará mediante un **único Cron cada 15 minutos**. Su función principal
 
 ---
 
-### A. Archivo de Configuración (`backups.conf`)
+### Archivo de Configuración (`backups.conf`)
 
 Este archivo es de **solo lectura para el script** y es donde definimos las políticas. Al usar formato INI, facilitamos la edición manual y la organización.
 
@@ -112,26 +132,46 @@ Este archivo es de **solo lectura para el script** y es donde definimos las pol�
 ```ini
 [100] #NO CAMBIAR ESTE ID, 100 siempre es el ID con la información relacionada al repositorio de BorgBackup.
 categoria = Repositorio BorgBackup
-frecuencia = N/A
-retention = N/A
+frecuencia = #N/A
+retention = #N/A
 rutas = ~/Backups/BorgBackup
-compresion = N/A
+compresion = #N/A
 
 [101] #NO CAMBIAR ESTE ID, 101 siempre es el ID del log_file donde se guardan los registros.
 categoria = Registros
-frecuencia = 2.592.000
-retention = 12
+frecuencia = 2592000 #Cada mes
+retention = 12 #Guarda lso registros del ultimo año (12 meses)
 rutas = ~/Backups/Logs_BorgBackup
-compresión = N/A Comprime siempre en '.zip'
+compresión = N/A Comprime siempre en '.zip' por defecto.
 
-[102]
+[102] #NO CAMBIAR ESTE ID, 102 siempre es el ID de la configuración de chequeo rapidos del repositorio.
+categoria = Chequeos Rapidos
+Frecuencia = 604800 #Cada semana
+retention = 52  #Guarda los registros de 1 año (52 semanas)
+Reparar = (True|Falase) # Establece si hacer reparaciones automaticas (True) o manuales (False)
+#compresión = N/A No comprime los registros por defecto.
+
+[103] #NO CAMBIAR ESTE ID, 103 siempre es el ID de la configuración de chequeo prfundo del repositorio.
+categoria = Chequeos Profundos
+Frecuencia = 2592000 # Cada mes
+retention = 12  #Guarda los registros de 1 año (12 meses)
+Reparar = (True|Falase) # Establece si hacer reparaciones automaticas (True) o manuales (False)
+#compresión = N/A No comprime los registros por defecto.
+
+[ 103 - 105 ] #Son reservados para el sistema.
+
+
+# <=== REGISTROS DEL USUARIO VAN A PARTIR DE ESTE PUNTO (ID 106+) ===>
+
+
+[106]
 categoria = Constante
 frecuencia = 900
 retencion = --keep-last 4 --keep-daily 7
 rutas = /home/user/Lab, /home/user/Work
 compresión = false
 
-[103]
+[107]
 categoria = Diario
 frecuencia = 86400
 retencion = --keep-daily 7
@@ -145,15 +185,25 @@ compresión = false
 
 * **El grupo [101]:** Contiene las configuraciones del archivos de registros .log
 * **frecuencia:** establece cada cuantos se hace rotación y comprension de los registros.
-* **retention:** Cantidad maxima de registros comprimidos almacaneados.
+* **retention:** Cantidad maxima de registros comprimidos almacaneados. Es un numero simple (1,10,100).
 * **rutas:** Las ruta es donde se guarda los registros.
 * **compresión:** Por defecto siempre se comprimen en formato '.zip'. Los logs contendrán muchos patrones repetitivos, para un solo archivo de texto con logs, la compresióne s rapido y el formato '.zip' es muy compatible con cualquier Sistema, y es rapido. Al comprmirlos se ahorraría un **porcentaje** de espacio muy cosniderable y siguen siendo faciles de acceder incluso despues de comprimir en '.zip'.
 
+* **El grupo [102](Chequeos Rapidos) y [103](Chequeos Profundos):** Contiene las configuraciones de los chequeos
+* **frecuencia:** establece cada cuanto se hace un chequeo del estado del repositorio. Es un numero simple (1,10,100).
+* **retention:** Cantidad maxima de registros almacenados sobre los resultados de los chequeos.
+* **rutas:** Las ruta es donde se guarda los registros.
+* **compresión:** Por defecto no se comprimen considerando que cada registro ocupa poco espacio. Incluso el comando de chequeo no imprime datos si no encuentra problemas.
+* **reparar:** Establece si intentar una reparación por defecto si se detectan errores (True) o si hacerla solo manual (Repair)
+rutas = ~/Backups/Checks_BorgBackup
+
+**Los gripos 106 en adelante (Grupos del Usuario):**
 * **ID:** Cabecera con identificador único numérico que vincula la configuración con el estado, permitiendo hacer cambios como el nombre de la categoria sin perder el historial.
 * **frecuencia:** Tiempo en segundos entre respaldos.
 * **retención:** Parámetros suados en el sistema 'BorgBackup' para la poda automática de archivos antiguos.
 * **rutas:** Rutas de los Directorios y Archivos a respaldar, separados por espacios. Las rutas se escribe igual que como se escribirían en la terminal, con '~' para el home, las rutas con espacios entre comillas: "/tmp/con espacios", o combinado: ~/"con espacios" ('~' dentro de comillas no se expande). 
 * **compresión:** Determina si se comprimen el contenido del backup. Este dato se pasa a BorgBackup que se encarga de hacer la compresión del backup.
+
 
 ---
 
@@ -185,42 +235,36 @@ Para mantener la flexibilidad, en el archivo `backups.conf` utilizaremos la **si
 * **Flexibilidad Total:** Si mañana quieres usar `--keep-yearly`, solo lo escribes en el `.conf` y el script lo aplicará automáticamente sin que tengamos que programar nada nuevo.
 * **Validación Simple:** Como definimos en el **Nivel 4**, solo verificamos que la cadena empiece con `--keep-`.
 
----
-
-¿Te parece que esta explicación deja claro cómo el usuario debe configurar sus reglas de limpieza? Si estás de acuerdo, esto cierra perfectamente la arquitectura de la configuración. **¿Te gustaría que definamos cómo el script ejecutará el comando `prune` usando estos datos?**
 
 ---
 
-### B. Archivo de Estado (`backups.state`)
+### Archivo de Estado (`backups.state`)
 
 Este archivo es **gestionado automáticamente por el script**. Mantiene la memoria operativa del sistema.
 
 **Ejemplo de estructura:**
 
 ```ini
-[101]
-categoria = Registros
-ultimo_exito = 1704891600
-tiempo_trasncurrido = 2.591.900 #(1 mes menos 100 segundos)
-tiempo_faltante = 100 #(con freciuencia de 1 mes, faltan 100 segundos para que se necesite un respaldo)
-estado = REALIZADO
-pid = 0
-
-[102]
+[106]
 Categoria = Constantes
 ultimo_exito = 1704891600
 tiempo_trasncurrido = 902 #(15 minutos con 2 segundos)
 tiempo_faltante = -2 #(con frecuencia de cada 15 minutos, se necesita una respaldo hace 2 segundos)
 estado = PENDIENTE #(Requiere backup, pero no ha inciado el proceso de backup o esta en espera de en un backup en PROCESO, (ejm. ID=103))
-pid = 0
 
-[103]
+[107]
+Categoria = Constantes
+ultimo_exito = 1704892500
+tiempo_trasncurrido = 1800 #(30 minutos)
+tiempo_faltante = -9000 #(con frecuencia de cada 15 minutos, se necesita una respaldo hace 2 segundos)
+estado = PENDIENTE #(Requiere backup, pero no ha inciado el proceso de backup o esta en espera de en un backup en PROCESO, (ejm. ID=103))
+
+[108]
 Categoria = Diarios
 ultimo_exito = 1704891600
 tiempo_trasncurrido = 86.505 (1 día más 105 segundos)
 tiempo_faltante = -105 #(con frecuencia de 1 día, se necesita el respaldo hace 104 segundos)
 estado = EN-PROCESO #(el sistema se encuentra realizando el backup con el ID 103, es decir, el grupo actual)
-pid = 123
 
 ```
 
@@ -234,7 +278,7 @@ pid = 123
 
 ---
 
-### C. Sistema de Trazabilidad y Logs
+### Sistema de Trazabilidad y Logs
 
 El script utiliza un sistema de registro centralizado mediante la función `log_msg()`. Esta lógica prioriza la legibilidad y permite una auditoría rápida mediante niveles de severidad y contextos específicos.
 
@@ -450,60 +494,81 @@ Previene la corrupción de datos evitando que dos instancias del script (ej. lan
 
 ```ini
 # =============================================================================
-#           CONFIGURACIÓN DEL GESTOR DE BACKUPS (BORG_MANAGER)
+#            CONFIGURACIÓN DEL GESTOR DE BACKUPS (BORG_MANAGER)
 # =============================================================================
+# Este archivo define DÓNDE, CUÁNDO y QUÉ respaldar.
 #
-# SECCIÓN 1: CONFIGURACIÓN DEL SISTEMA (IDs 100 y 101)
+# TABLA DE REFERENCIA DE TIEMPO (Frecuencia en segundos):
 # -----------------------------------------------------------------------------
-# [100] REPOSITORIO: Es el lugar "físico" donde se guardan tus copias.
-# [101] LOGS: Controla la limpieza y el historial de los registros de error.
-#
-# SECCIÓN 2: TAREAS DE USUARIO (IDs 102 en adelante)
+# 15 Minutos = 900          | 1 Día (24h)  = 86400
+# 1 Hora     = 3600         | 1 Semana     = 604800
+# 6 Horas    = 21600        | 1 Mes        = 2592000
 # -----------------------------------------------------------------------------
-# FRECUENCIA: Segundos entre backups (900=15min, 3600=1h, 86400=1día).
-# RUTAS: Directorios a respaldar (Ej: /home/usuario/Documentos).
-# RETENCION: Cuántas copias viejas guardar (Ej: --keep-last 5).
-# =============================================================================
 
-# -----------------------------------------------------------------------------
-# SECCIÓN 1: CONFIGURACIÓN DEL SISTEMA (REPOSITORIO Y LOGS)
-# -----------------------------------------------------------------------------
+# =============================================================================
+# SECCIÓN 1: CONFIGURACIÓN DEL SISTEMA (IDs 100 al 105)
+# =============================================================================
 
 [100]
-categoria = Repositorio Principal de Datos
-# ¿DÓNDE se guardarán todos los backups? (Ruta a tu disco o carpeta de destino).
-# Ejemplo: /media/usuario/disco_externo/copias_borg
-rutas = ~/Home/Backups/Borg-Backups/Repository
-# No tocar para esta versión:
+categoria = Repositorio
+# El destino físico donde se almacenarán todas las copias de seguridad.
+# Si la carpeta no existe, el script intentará crearla.
+rutas = ~/Backups/Borg-Backups/Repository
 encryption = none
 
 [101]
-categoria = Historial y Rotación de Logsn
-# ¿Cada cuánto tiempo procesar y limpiar el archivo de log? (2592000 = 1 mes).
-frecuencia = 2592000
-# ¿Cuántos archivos .zip de historial quieres conservar?
+categoria = Bitacora
+# Frecuencia: Cada cuánto tiempo comprimir el log actual (Ej: 2592000 = 1 mes).
+frecuencia = 2592000 # Cada mes
+# Retención: Cuántos archivos .zip históricos conservar en la carpeta de logs.
 retencion = 12
-# ¿DÓNDE guardar los .zip? (Si se deja vacío, el log se limpia pero NO se guarda).
-rutas = ~/Home/Backups/Borg-Backups/Logs
+# Ruta: Carpeta donde se guardarán los .zip (Si se deja vacío, el log se limpia pero no se guarda).
+rutas = ~/Backups/Borg-Backups/Logs
 
+[102]
+categoria = Chequeos Rapidos
+Frecuencia = 604800 #Cada semana
+retention = 52  #Guarda los registros de 1 año (52 semanas)
+Reparar = (True|Falase) # Establece si hacer reparaciones automaticas (True) o manuales (False)
+#compresión = N/A No comprime los registros por defecto.
+
+[103]
+categoria = Chequeos Profundos
+Frecuencia = 2592000 # Cada mes
+retention = 12  #Guarda los registros de 1 año (12 meses)
+Reparar = (True|Falase) # Establece si hacer reparaciones automaticas (True) o manuales (False)
+#compresión = N/A No comprime los registros por defecto.
+
+[104] # Sin asignar
+
+[105] # Sin asignar
+
+# =============================================================================
+# SECCIÓN 2: TAREAS DE RESPALDO DE USUARIO (ID 106 en adelante)
+# =============================================================================
+# INSTRUCCIONES:
+# 1. ID: Debe ser único y empezar desde el ID 106.
+# 2. RUTAS: Separadas por espacios. 
+#    - Usa comillas para nombres con espacios: "/home/user/Mi Carpeta"
+#    - El símbolo '~' funciona fuera de comillas: ~/Documentos
+# 3. COMPRESION: 'True' (usa zstd,6 - lento pero pequeño) o 'False' (rápido).
+# 4. RETENCION: Define qué CONSERVAR. Borg borrará lo que no coincida.
+#    --keep-last N    : Guarda los últimos N respaldos.
+#    --keep-daily N   : Guarda 1 respaldo al día de los últimos N días.
+#    --keep-weekly N  : Guarda 1 respaldo por semana de las últimas N semanas.
+#    --keep-monthly N : Guarda 1 respaldo por mes de los últimos N meses.
+#
+#    Ejemplo de combinación: --keep-last 5 --keep-daily 7 --keep-monthly 2
 # -----------------------------------------------------------------------------
-# SECCIÓN 2: TAREAS DE RESPALDO (AÑADE TUS ARCHIVOS Y CARPETAS AQUI)
-# -----------------------------------------------------------------------------
-# Instrucciones:
-# - Usa IDs únicos empezando desde el 102.
-# - En RUTAS puedes poner varias carpetas y archivos separadas por esacios y
-#   Si las rutas tienen espacios, encierra la ruta entre comillas.
-# - En COMPRESSION usa 'True' para ahorrar espacio o 'False' para más velocidad.
 
-# Ejemplo:
-# [102]
-# categoria = Nombre de mi Tarea
-# frecuencia = 3600
-# rutas = /home/usuario/Carpeta1, /home/usuario/Carpeta2
-# retencion = --keep-last 5 --keep-daily 7
-# compression = True
+#[106]
+#categoria = Documentos y Proyectos
+#frecuencia = 3600
+#rutas = ~/Documents "/home/usuario/Proyectos Especiales"
+#retencion = --keep-last 5 --keep-daily 7
+#compression = True
 
-# >>> ESCRIBE TUS NUEVAS CATEGORÍAS A PARTIR DE AQUÍ <<<
+# >>> AÑADE TUS NUEVAS CATEGORÍAS A PARTIR DE AQUÍ <<<
 
 ```
 
@@ -547,7 +612,6 @@ rutas = ~/Home/Backups/Borg-Backups/Logs
 1. **Validación de Datos:** Comprueba que `frecuencia` y `retencion` sean enteros.
 * Si fallan: Se guarda en las variables frecuencia y retencion los valores de emergencia (30 días = 2.592.000 de frecuencia, 12 archivos de retención). **LOG-LEVEL: WARN** (FORZAR_NOTIF=true).
 
-
 2. **Ruta de Históricos:**
 * **Ruta Válida:** La ruta es real y accesible, Informa y guarda la ruta en la variable de ruta para logs. **LOG-LEVEL: INFO**.
 * **Ruta Inválida/Vacía:** 
@@ -559,7 +623,32 @@ rutas = ~/Home/Backups/Borg-Backups/Logs
 
 3. Al final se informan los datos que se usarán para los logs (frecuencia, retenciÓn, ruta). **LOG-LEVEL: INFO**.
 
+---
 
+### Nivel 5: Valdiacione de Parámetros de los Chequeos (ID 102 y 103)
+
+* Este nivel garantiza que los valores de los chequeos sean correctos y hayan rutas donde registrar los resultados.
+
+1. **Validación de Datos:** Comprueba que `frecuencia` y `retencion` sean enteros.
+* Si fallan: Se guarda en las variables frecuencia y retencion los valores de emergencia (30 días = 2.592.000 de frecuencia, 24 archivos de retención). **LOG-LEVEL: WARN** (FORZAR_NOTIF=true).
+
+2. **Ruta de Históricos:**
+* **Ruta Válida:** La ruta es real y accesible, Informa y guarda la ruta en la variable de ruta para logs. **LOG-LEVEL: INFO**.
+* **Ruta Inválida/Vacía:** 
+   * Si la ruta esta especifica, pero el directorio no existe, intenta crearla. 
+      * logra crearla y guarda la ruta en la variable. **LOG-LEVEL: WARM**.
+      * NO logra crearla. **LOG-LEVEL: WARN** (FORZAR_NOTIF=true).
+   * Si la ruta no esta especifica o no es accesible, informa y no guarda nada.**LOG-LEVEL: WARN** (FORZAR_NOTIF=true).
+
+
+### 4. Reparar (True|False = 0|1)
+
+* **Tratamiento:** El script normaliza la entrada a minúsculas.
+* **Lógica Binaria:** * `true` (en cualquier combinación de mayúsculas)  Se guarda **0** (Activado).
+* Cualquier otro valor (o vacío)  Se guarda **1** (Desactivado).
+
+
+---
 
 ## 3.2. Fase 2 (Filtrado y Procesamiento de Datos)
 
@@ -769,9 +858,11 @@ Luego de verificar la viabilidad de espacio del ID, se procede a crear el backup
 
 ---
 
-### Caso Especial Mantenimiento de Bitácora (ID 101)
+### Casos Especiales 
 
-Ya que los logs (ID 101) se manejan de manera distinta a como se manejan las tareas a respaldar (IDs 102+), se crea un caso espacial para el manejo de los logs, que usan unas politicas de retención espacial.
+Ya que los logs (ID 101) y los chequeos (ID 102 y 103) se manejan de manera distinta a como se manejan las tareas a respaldar (IDs 106+), se crea un caso espacial para el manejo de los logs, que usan unas politicas de retención espacial.
+
+#### Manejo de la Bitácora (ID 101)
 
 1. **Condición de Activación:** `(tiempo_faltante_ID101 <= 0)`.
 2. **Proceso de Rotación:**
@@ -779,10 +870,13 @@ Ya que los logs (ID 101) se manejan de manera distinta a como se manejan las tar
 * Se aplica la poda: Si hay más de `X` (retención) archivos zip, se eliminan los logs del más antigupo al más reciente, hasta que `cantidad_logs == retention_logs`. **LOG-LEVEL: INFO**.
 * Se limpia el archivo de logs (backups.log). **LOG-LEVEL: INFO**.
 
+#### Manejo de los chequeos (ID 102 y 103)
+1. **Condición de Activación:** `(tiempo_faltante_ID102 <= 0 || tiempo_faltante <= 0)`.
+2. **Proceso de Chequeo:**
+* Se realiza el proceso de chequeo y se registran lso resultados. **LOG-LEVEL: INFO**. Si hay algun error o advertencia se registra, se informa y se valida si el campo de `reparar` es tru o false, es decir, si se aplica o no la reparación automatica en estos casos.  **LOG-LEVEL: ERROR**. Si hay errores y las reparacioens se hacen de forma automatica y no se logra hrealziar la reparación con exito, se registra y s einforma.  **LOG-LEVEL: CRITIC**.
+* Los archivos de registro deben guardarse con un diferenciador para los chequeos rapidos (ID_FAST), un diferenciador para los chequeps profundos (ID_DEEP) y en el caso de los registros de intentos de reparaciones que se realicen se usa otro identificador (ID_FIX) y estos archivos de reparación no se rotan ṕor defecto.
+* Se aplica la poda: Si hay más de `X` (retención) archivos de refgistros, se eliminan los logs del más antigupo al más reciente, hasta que `cantidad_logs == retention_logs`. **LOG-LEVEL: INFO**.
 
----
-
-Este es el plan organizado y estructurado para la documentación de la **UI y Gestión**, integrando los detalles técnicos del archivo de configuración propio del panel y la lógica de validación de dependencias.
 
 ---
 
