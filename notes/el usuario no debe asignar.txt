@@ -1,0 +1,26 @@
+El usuario no debe asignar los IDs, eso lo debe asiganr el sistema sin repeticiones que se tengan que valdiar.
+
+La nueva estructura de las tareas será:
+
+"""
+[Categoria]
+campo1 = ...
+campo2 = ...
+campo3 = ...
+...
+"""
+
+Y luego los procesamos y lo dejamos como:
+"""
+[$id]
+categoria = $Categoria
+campo1 = ...
+campo2 = ...
+campo3 = ..
+"""
+
+Y así simplemente procesariamos el archivo teporal con los ID que el sistema asigna y podremos reutilizar el codigo que tenemos que sería compatrible con este formato, pero ahora sin tener que preocuparnos de los IDs que el sistema ahora se encargará de asignar.
+
+---
+
+En la fase 2 simeplemente habría que añadir una función de asignaciónd e ID, que consulte si la categoria ([Categoria]) de cada tarea ya tiene asigando un ID en el STATE_FILE o si debe asignarsele uno nuevo.  Y claro, tener las validaciones que ya deberpia tener el sistema sobre que si una tarea esta en el state pero no en el config, se elimina y si esta en el config pero no en el state, se asigna. Y si quiero algo más pulido, podría añadir valdiaciones para saber si solo cambio el nombre de la categoria o si es una nueva categoria, aunque por simplicidad, al incio podrṕía tomarse como referencia solo el valor de la catgeoria y si no esta en el estate, se asigna como nueva y con ultimo_exito=0.
