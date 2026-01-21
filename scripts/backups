@@ -240,17 +240,20 @@ rutas = ~/Backups/Borg-Backups/Logs
 
 [102]
 categoria = Chequeos Rapidos
-Frecuencia = 604800 #Cada semana
-retention = 52  #Guarda los registros de 1 año (52 semanas)
-Reparar = (True|Falase) # Establece si hacer reparaciones automaticas (True) o manuales (False)
-#compresión = N/A No comprime los registros por defecto.
+frecuencia = 604800 # Cada semana
+retencion = 52  # Guarda los registros de 1 año (52 semanas)
+reparar = (True|Falase) # Establece si hacer reparaciones automaticas (True) o manuales (False)
+compresión = # N/A No comprime los registros por defecto.
+rutas = ~/Backups/Borg-Backups/Checks
 
 [103]
 categoria = Chequeos Profundos
-Frecuencia = 2592000 # Cada mes
-retention = 12  #Guarda los registros de 1 año (12 meses)
-Reparar = (True|Falase) # Establece si hacer reparaciones automaticas (True) o manuales (False)
-#compresión = N/A No comprime los registros por defecto.
+frecuencia = 2592000 # Cada mes
+retencion = 12  # Guarda los registros de 1 año (12 meses)
+reparar = (True|Falase) # Establece si hacer reparaciones automaticas (True) o manuales (False)
+compresión = # N/A No comprime los registros por defecto.
+rutas = ~/Backups/Borg-Backups/Checks
+
 
 [104] # Sin asignar
 
@@ -343,7 +346,7 @@ log_msg "INFO" "SYSTEM" "Entorno validado."
 # =============================================================================
 
 # Limpiamos la ruta (quitamos comillas y expandimos ~)
-REPO_PATH=$(get_expanded_paths "$CONFIG_FILE" "100" | sed 's/\"//g')
+REPO_PATH=$(get_expanded_paths "$STRIPPED_CONFIG" "100" | sed 's/\"//g')
 
 if [ -z "$REPO_PATH" ] || [ "$REPO_PATH" == "null" ]; then
     log_msg "CRITIC" "ID_100" "La ruta del repositorio no está definida en el .conf"
@@ -399,7 +402,7 @@ fi
 # Uso: get_config_value "id_seccion" "nombre_campo"
 LOG_FREQ_RAW=$(get_config_value "$STRIPPED_CONFIG" "101" "frecuencia")
 LOG_RET_RAW=$(get_config_value "$STRIPPED_CONFIG" "101" "retencion")
-LOG_REPO_PATH=$(get_expanded_paths "$CONFIG_FILE" "101" | sed 's/\"//g')
+LOG_REPO_PATH=$(get_expanded_paths "$STRIPPED_CONFIG" "101" | sed 's/\"//g')
 
 # 2. Validación de Integridad de los datos numéricos
 if [[ "$LOG_FREQ_RAW" =~ ^[0-9]+$ ]]; then
@@ -442,6 +445,80 @@ log_msg "INFO" "ID_101" "Configuración Validada: Freq=${LOG_FREQ}s | Ret=${LOG_
 
 
 # =============================================================================
+# NIVEL 5: VALIDACIÓN DE PARÁMETROS DE CHEQUEOS (ID 102 y 103)
+# =============================================================================
+
+for id_check in 102 103; do
+    tipo_check="Rápido"
+    [ "$id_check" == "103" ] && tipo_check="Profundo"
+
+    # 1. Extracción de valores
+    C_FREQ_RAW=$(get_config_value "$STRIPPED_CONFIG" "$id_check" "frecuencia")
+    echo "[AUD1]: AL BUCAR LA FRECUENIA PARA EL ID_$id_check EL RESULTADO FUE ($C_FREQ_RAW)"
+    printf "[AUD2]: EN EL ARCHIVO DE CONFIGURACIONES TEMPORALES SE ENCUENTRA ESTO:\n$"
+    echo "STRIPPED_CONFIG APUNTA A: ($STRIPPED_CONFIG) Y SU CONTENIDO ES:"
+    cat "$STRIPPED_CONFIG"
+    C_RET_RAW=$(get_config_value "$STRIPPED_CONFIG" "$id_check" "retencion")
+    C_REPAIR_RAW=$(get_config_value "$STRIPPED_CONFIG" "$id_check" "reparar" | tr '[:upper:]' '[:lower:]')
+    C_PATH_RAW=$(get_expanded_paths "$CONFIG_FILE" "$id_check" | sed 's/\"//g')
+
+    # 2. Validación de Datos (Frecuencia y Retención)
+    if [[ "$C_FREQ_RAW" =~ ^[0-9]+$ ]]; then
+        declare "CHECK_FREQ_${id_check}=$C_FREQ_RAW"
+    else
+        declare "CHECK_FREQ_${id_check}=2592000" # 30 días
+        log_msg "WARN" "ID_$id_check" "Frecuencia inválida ($C_FREQ_RAW). Usando valor de emergencia (30d)." "true"
+    fi
+
+    if [[ "$C_RET_RAW" =~ ^[0-9]+$ ]]; then
+        declare "CHECK_RET_${id_check}=$C_RET_RAW"
+    else
+        declare "CHECK_RET_${id_check}=24" # 24 archivos
+        log_msg "WARN" "ID_$id_check" "Retención inválida ($C_RET_RAW). Usando valor de emergencia (24u)." "true"
+    fi
+
+    # 3. Validación de la Ruta de Históricos
+    VALID_PATH_VAR="CHECK_PATH_$id_check"
+    declare "$VALID_PATH_VAR="
+
+    if [ -z "$C_PATH_RAW" ] || [ "$C_PATH_RAW" == "null" ]; then
+        log_msg "WARN" "ID_$id_check" "Ruta de históricos no definida o inaccesible." "true"
+    else
+        if [ ! -d "$C_PATH_RAW" ]; then
+            if mkdir -p "$C_PATH_RAW" 2>/dev/null; then
+                declare "$VALID_PATH_VAR=$C_PATH_RAW"
+                log_msg "WARM" "ID_$id_check" "Directorio de históricos creado en: $C_PATH_RAW"
+            else
+                log_msg "WARN" "ID_$id_check" "No se pudo crear la ruta de históricos." "true"
+            fi
+        else
+            if [ -w "$C_PATH_RAW" ]; then
+                declare "$VALID_PATH_VAR=$C_PATH_RAW"
+                log_msg "INFO" "ID_$id_check" "Ruta de históricos validada."
+            else
+                log_msg "WARN" "ID_$id_check" "Sin permisos de escritura en ruta de históricos." "true"
+            fi
+        fi
+    fi
+
+    # 4. Lógica de Reparación (Normalización Binaria)
+    if [ "$C_REPAIR_RAW" == "true" ]; then
+        declare "CHECK_REPAIR_${id_check}=0"
+    else
+        declare "CHECK_REPAIR_${id_check}=1"
+    fi
+
+    # Informe final del ID procesado
+    eval "FINAL_F=\$CHECK_FREQ_${id_check}"
+    eval "FINAL_R=\$CHECK_RET_${id_check}"
+    eval "FINAL_P=\$$VALID_PATH_VAR"
+    eval "FINAL_REP=\$CHECK_REPAIR_${id_check}"
+    
+    log_msg "INFO" "ID_$id_check" "Chequeo $tipo_check Validado: Freq=${FINAL_F}s | Ret=${FINAL_R}u | Repair=${FINAL_REP} | Path=${FINAL_P:-"NINGUNA"}"
+done
+
+
+# =============================================================================
 # FASE 2: SINCRONIZACIÓN DE LAS CONFIGURACIONES Y ESTADOS DEL PROGRAMA
 # =============================================================================
 log_msg "INFO" "SYSTEM" "Iniciando sincronización de estados (Fase 2)..."
@@ -449,7 +526,7 @@ log_msg "INFO" "SYSTEM" "Iniciando sincronización de estados (Fase 2)..."
 TEMP_STATE=$(mktemp)
 AHORA=$(date +%s)
 # Captura todos los de 3 dígitos pero quita el 100
-IDS_CONFIGURADOS=$(grep -oP '^\[[1-9][0-9]{2,}\]' "$CONFIG_FILE" | grep -vE '\[100\]' | tr -d '[]')
+IDS_CONFIGURADOS=$(grep -oP '^\[[1-9][0-9]{2,}\]' "$STRIPPED_CONFIG" | grep -vE '\[100\]' | tr -d '[]')
 
 # Listas para separar los IDs
 IDS_UNICOS=()
@@ -495,10 +572,10 @@ for ID in "${IDS_UNICOS[@]}"; do
         COMP=1
     else
         # Caso normal: Extracción usando get_config_value con el ID (sin líneas)
-        CAT=$(get_config_value "$CONFIG_FILE" "$ID" "categoria")
-        F_RAW=$(get_config_value "$CONFIG_FILE" "$ID" "frecuencia")
-        C_RAW=$(get_config_value "$CONFIG_FILE" "$ID" "compresion" | tr '[:upper:]' '[:lower:]')
-        R_RAW=$(get_config_value "$CONFIG_FILE" "$ID" "retencion")
+        CAT=$(get_config_value "$STRIPPED_CONFIG" "$ID" "categoria")
+        F_RAW=$(get_config_value "$STRIPPED_CONFIG" "$ID" "frecuencia")
+        C_RAW=$(get_config_value "$STRIPPED_CONFIG" "$ID" "compresion" | tr '[:upper:]' '[:lower:]')
+        R_RAW=$(get_config_value "$STRIPPED_CONFIG" "$ID" "retencion")
 
         # A. Frecuencia
         if [[ "$F_RAW" =~ ^[0-9]+$ ]]; then
@@ -539,7 +616,7 @@ for ID in "${IDS_UNICOS[@]}"; do
 
         # D. Rutas (Usando tu función get_expanded_paths)
         # Nota: Pasamos el ID directamente, ya no necesitamos número de línea
-        RUTAS=$(get_expanded_paths "$CONFIG_FILE" "$ID")
+        RUTAS=$(get_expanded_paths "$STRIPPED_CONFIG" "$ID")
 
         # --- VALIDACIÓN DE ACCESIBILIDAD (Tu lógica find) ---
         RUTAS_EXISTENTES=""
@@ -797,7 +874,7 @@ else
         # ---------------------------------------------------------------------
 
 	rutas=$(get_expanded_paths "$STATE_FILE" "$id")
-	repo_dir=$(get_expanded_paths "$CONFIG_FILE" "100" | sed 's/\"//g') #la ruta viene con comillas en state y da problemas con borg, pro eso se eliminan	    
+	repo_dir=$(get_expanded_paths "$STRIPPED_CONFIG" "100" | sed 's/\"//g') #la ruta viene con comillas en state y da problemas con borg, pro eso se eliminan	    
 
         log_msg "INFO" "SYSTEM" "Iniciando proceso para ID: $id ($cat)"
 
