@@ -814,6 +814,7 @@ Realiza los calculos de los valores asociados a cada ID para usarlos en el progr
 * Si `tiempo_faltante <= 0` AND `estado == "REALIZADO"` → Cambiar a `PENDIENTE`. **LOG-LEVEL: INFO**
 * Si `estado == "REALIZADO"` AND `tiempo_faltante > frecuencia` (lleva almenos 1 retraso en 1 back) → Notifica el **Retraso** y cambia el estado PENDIENTE. **LOG-LEVEL: WARN** (FORZAR_NOTIF=true).
 * Si `estado == EN-PROCESO` → Cambiar a `PENDIENTE`. Esto indica que el proceso se incio, pero algo salio mal. **LOG-LEVEL: WARN** (FORZAR_NOTIF=true).
+* Si `esatdo` NO tiene como valor ninguno de los estados predefinidos (REALIZADO, PENDIENTE, EN-PROCESO), pasa al estado de PENDIENTE. Esto podría darse por un error en el proceso, así que debe ser registrado. **LOG-LEVEL: WARM**
 
 ### Ordenamiento 
 
