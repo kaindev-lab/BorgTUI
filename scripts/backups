@@ -27,7 +27,7 @@ get_expanded_paths() {
     local final_paths=""
 
     # 1. Extraer la línea cruda (manejando el ID y eliminando basura)
-    raw_val=$(sed -n "/^\[$id\]/,/^\[/p" "$file" | sed 's/#.*//' | grep "^rutas =" | head -n 1 | cut -d'=' -f2-)
+    raw_val=$(sed -n "/^\[$id\]/,/^\[/p" "$file" | sed 's/#.*//' | grep -i "^rutas =" | head -n 1 | cut -d'=' -f2-)
     
     # 2. Usamos eval para que Bash interprete las comillas del archivo .conf
     # Esto expande las rutas correctamente dentro de un array
@@ -61,7 +61,7 @@ get_config_value() {
     # 4. Obtenemos el valor siguiente aignado ('= asignado')
     # 5. Convertimos a parametro validos con xargs, que interpeta bien los espacios en la retención y elimina espaciso inecesarios.
     value=$(sed -n "/^\[$section_id\]/,/^\[/p" "$file" \
-            | grep "^$field_name =" \
+            | grep -i "^$field_name =" \
             | head -n 1 \
             | cut -d'=' -f2- \
             | xargs)
