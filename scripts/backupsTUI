@@ -219,14 +219,17 @@ while true; do
 
     # 3. Menú Principal (Ajustado alto a 23 y items visibles a 7)
     OPTION=$(whiptail --title "Gestor Automatizado de Backups" \
-                      --menu "$DASHBOARD_TEXT" 23 78 7 \
-                      "1" "Visualizar Registros (Logs)" \
-                      "2" "Estado de las tareas (Backups)" \
-                      "3" "Estado del Repositorio" \
-                      "4" "Configurar Tareas (.conf)" \
-                      "5" "Ejecución Manual (Forzar Backups)" \
-                      "6" "Créditos e Información" \
-                      "0" "Salir" 3>&1 1>&2 2>&3)
+    --menu "$DASHBOARD_TEXT" 25 78 10 \
+    "1" "Visualizar Registros (Logs)" \
+    "2" "Estado de las tareas (Backups)" \
+    "3" "Estado del Repositorio" \
+    "4" "Configurar Tareas (.conf)" \
+    "5" "Ejecución Manual (Forzar Backups)" \
+    "6" "Créditos e Información" \
+    "7" "Chequeo Rápido (Estructura)" \
+    "8" "Chequeo Profundo (Datos)" \
+    "9" "Reparación de Repositorio" \
+    "0" "Salir" 3>&1 1>&2 2>&3)
 
     if [ $? != 0 ]; then OPTION="0"; fi
 
@@ -395,6 +398,58 @@ $STATE_INFO" 25 100
             INFO+="Versión: 1.0.0 (2026)"
             
             whiptail --title "Acerca del Proyecto" --msgbox "$INFO" 18 65
+            ;;
+
+        7)
+            # --- CHEQUEO RÁPIDO ---
+            log_tui_action "INFO" "Usuario inició Chequeo Rápido con progreso."
+            REPO_PATH=$(sed -n '/^\[100\]/,/^\[/p' "$CONFIG_FILE" 2>/dev/null | grep "^rutas =" | cut -d'=' -f2- | sed 's/^[[:space:]]*//; s/[[:space:]]*$//' | tr -d '"' | sed "s|~|$HOME|")
+            
+            if (whiptail --title "Chequeo Rápido" --yesno "Se verificará la estructura y consistencia de los índices.\n\n¿Continuar?" 12 65); then
+                # 1. Preparar terminal
+                clear
+                stty sane
+                
+                echo "=== BORG CHECK: ESTRUCTURA Y SEGMENTOS (RÁPIDO) ==="
+                echo "Repositorio: $REPO_PATH"
+                echo "---------------------------------------------------"
+                
+                # 2. Ejecutar con --progress (Sin --verify-data para que sea rápido)
+                # Capturamos la salida de error (donde borg envía el progreso) y la estándar
+                borg check --verbose --progress "$REPO_PATH"
+                
+                echo "---------------------------------------------------"
+                echo "Chequeo finalizado."
+                
+                # 3. Pausa para lectura antes de volver a la TUI
+                pause_screen
+            fi
+            ;;
+
+        8)
+            # --- CHEQUEO PROFUNDO ---
+            log_tui_action "INFO" "Usuario inició Chequeo Profundo."
+            REPO_PATH=$(sed -n '/^\[100\]/,/^\[/p' "$CONFIG_FILE" 2>/dev/null | grep "^rutas =" | cut -d'=' -f2- | sed 's/^[[:space:]]*//; s/[[:space:]]*$//' | tr -d '"' | sed "s|~|$HOME|")
+            
+            if (whiptail --title "Confirmación" --yesno "El chequeo profundo verifica cada bloque de datos. Esto puede tardar mucho.\n\n¿Continuar?" 12 65); then
+                clear; stty sane
+                echo "=== BORG CHECK: VERIFY DATA ==="
+                borg check --verbose --verify-data --progress "$REPO_PATH"
+                pause_screen
+            fi
+            ;;
+
+        9)
+            # --- REPARACIÓN ---
+            log_tui_action "WARN" "Usuario accedió a Reparación de datos."
+            REPO_PATH=$(sed -n '/^\[100\]/,/^\[/p' "$CONFIG_FILE" 2>/dev/null | grep "^rutas =" | cut -d'=' -f2- | sed 's/^[[:space:]]*//; s/[[:space:]]*$//' | tr -d '"' | sed "s|~|$HOME|")
+            
+            if (whiptail --title "PELIGRO" --yesno "La reparación puede eliminar datos corruptos para salvar el resto del repo.\n\n¿Desea intentar reparar?" 12 65); then
+                clear; stty sane
+                echo "=== BORG CHECK: REPAIR ==="
+                borg check --verbose --progress --repair "$REPO_PATH"
+                pause_screen
+            fi
             ;;
 
         0)
