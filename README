@@ -73,11 +73,13 @@ BorgTUI NO aplica una regla de “todo o nada” para la lista de archivos y dir
 BorgTUI automatiza las tareas que deben automatizarse, pero evita la automatización ciega: favorece la transparencia, la trazabilidad y la rapidez para diagnosticar y corregir problemas. Los backups se ejecutan automáticamente, registran su actividad y notifican al usuario cuando se requiere atención.
 
 
-### Qué ofrece (SECCIONAR PARA COMBINAR CON EL TEMA DE LOS PILARES)
+### ¿Qué ofrece?
 
-Automatización de los respaldos y revisiones de las tareas, archivos y directorisoq ue se configuren.
+Automatización de los respaldos con los archivos y directoriso seguún las condiciones fderotación que se especifiquen.
 
 Rotación de los backups con politicas efectivas como guardar un backup de cada día y las ultimas 4 backups realizados recientemenete del día actual.
+
+Chqueos automaticos de la integridad de los datos con la posibilidad de reparación automatica si se encuentra alguna corrupción.
 
 Visibilidad inmediata del estado de los respaldos sin necesidad de consultar cientos de logs en intentar entender que está bien y que está mal, que se respaldo y que no; puedes consultarlo todo en un mismo lugar (panel/TUI).
 
