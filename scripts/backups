@@ -242,7 +242,6 @@ rutas = ~/Backups/Borg-Backups/Logs
 categoria = Chequeos Rapidos
 frecuencia = 604800 # Cada semana
 retencion = 52  # Guarda los registros de 1 año (52 semanas)
-reparar = (True|Falase) # Establece si hacer reparaciones automaticas (True) o manuales (False)
 compresión = # N/A No comprime los registros por defecto.
 rutas = ~/Backups/Borg-Backups/Checks
 
@@ -250,7 +249,6 @@ rutas = ~/Backups/Borg-Backups/Checks
 categoria = Chequeos Profundos
 frecuencia = 2592000 # Cada mes
 retencion = 12  # Guarda los registros de 1 año (12 meses)
-reparar = (True|Falase) # Establece si hacer reparaciones automaticas (True) o manuales (False)
 compresión = # N/A No comprime los registros por defecto.
 rutas = ~/Backups/Borg-Backups/Checks
 
@@ -455,7 +453,6 @@ for id_check in 102 103; do
     # 1. Extracción de valores
     C_FREQ_RAW=$(get_config_value "$STRIPPED_CONFIG" "$id_check" "frecuencia")
     C_RET_RAW=$(get_config_value "$STRIPPED_CONFIG" "$id_check" "retencion")
-    C_REPAIR_RAW=$(get_config_value "$STRIPPED_CONFIG" "$id_check" "reparar" | tr '[:upper:]' '[:lower:]')
     C_PATH_RAW=$(get_expanded_paths "$CONFIG_FILE" "$id_check" | sed 's/\"//g')
 
     # 2. Validación de Datos (Frecuencia y Retención)
@@ -694,12 +691,6 @@ for ID in "${IDS_UNICOS[@]}"; do
         echo "retencion = $RET"
         echo "rutas = $RUTAS"
         [[ "$ID" != "101" ]] && echo "compresion = $COMP"
-
-        # Escribimos reparar SOLO para IDs 102 y 103
-        if [[ "$ID" == "102" || "$ID" == "103" ]]; then
-            echo "reparar = ${REPARAR:-0}"
-        fi
-
         echo "ultimo_exito = $ULTIMO_E"
         echo "tiempo_trasncurrido = $T_TRANS"
         echo "tiempo_faltante = $T_FALTANTE"
@@ -913,7 +904,6 @@ else
             # Nota: En la Fase 2 guardamos la ruta de históricos en el campo 'rutas' para estos IDs
             log_path=$(grep -A 9 "^\[$id\]" "$STATE_FILE" | grep "^rutas =" | cut -d'=' -f2- | xargs)
             retencion=$(grep -A 9 "^\[$id\]" "$STATE_FILE" | grep "^retencion =" | awk '{print $3}')
-            reparar_bool=$(grep -A 9 "^\[$id\]" "$STATE_FILE" | grep "^reparar =" | awk '{print $3}')
             
             # Definir tipo de chequeo. Siempre con la opción de --verbose para dejar registrado el proceso.
             if [ "$id" == "102" ]; then
@@ -954,34 +944,7 @@ else
                 sed -i "/^\[$id\]/,/^$/ { s/^estado =.*/estado = REALIZADO/; s/^ultimo_exito =.*/ultimo_exito = $ahora_unix/ }" "$STATE_FILE"
 
             else
-                log_msg "ERROR" "ID_$id" "Problemas detectados durante el chequeo (Exit Code: $CHECK_EXIT). Ver detalle en logs."
-                
-                # 4. Lógica de Reparación (Solo si falló y está activado)
-                # Asumimos que 0 = true (reparar) según tu lógica anterior de "Normalización Binaria", 
-                # o 1 = true. Ajusta según tu script. Aquí asumo 1 = True (activado).
-                if [ "$reparar_bool" -eq 1 ]; then 
-                    log_msg "WARN" "ID_$id" "Modo de Auto-Reparación ACTIVADO. Intentando reparar..."
-                    
-                    FIX_LOG="$log_path/repair_ID_FIX_${TIMESTAMP}.log"
-                    
-                    borg check --repair "$repo_dir" > "$FIX_LOG" 2>&1
-                    REPAIR_EXIT=$?
-                    
-                    if [ $REPAIR_EXIT -eq 0 ]; then
-                        log_msg "INFO" "ID_$id" "Reparación completada con éxito."
-                        # Marcamos como realizado aunque hubo reparación
-                        ahora_unix=$(date +%s)
-                        sed -i "/^\[$id\]/,/^$/ { s/^estado =.*/estado = REALIZADO/; s/^ultimo_exito =.*/ultimo_exito = $ahora_unix/ }" "$STATE_FILE"
-                    else
-                        log_msg "CRITIC" "ID_$id" "LA REPARACIÓN AUTOMÁTICA FALLÓ. Intervención manual requerida."
-                        # Dejamos en PENDIENTE o podríamos poner un estado ERROR
-                        sed -i "/^\[$id\]/,/^$/ { s/^estado =.*/estado = PENDIENTE/ }" "$STATE_FILE"
-                    fi
-                else
-                    log_msg "WARN" "ID_$id" "Reparación desactivada en configuración. No se tomaron acciones correctivas."
-                    # Marcamos PENDIENTE para que se reintente o alerte
-                    sed -i "/^\[$id\]/,/^$/ { s/^estado =.*/estado = PENDIENTE/ }" "$STATE_FILE"
-                fi
+                log_msg "CRITIC" "ID_$id" "Problemas detectados durante el chequeo (Exit Code: $CHECK_EXIT). Ver detalle en logs."                                
             fi
 
             # 4. Rotación de Logs de Chequeo (Pruning Local)

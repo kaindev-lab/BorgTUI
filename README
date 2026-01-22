@@ -52,7 +52,7 @@ Los backups solo valen si sabes que funcionan. BorgTUI evita la falsa tranquilid
 
 * Incluye validaciones y correcciones de seguridad:  valida acceso a los datos por respaldar, configuraciones válidas, comprobación de espacio en disco antes de realizar los backups, manejo de valores de emergencia para políticas de rotación, frecuencia y compresión cuando estos datos no son válidos o no sé específican.
 
-* Puedes programar chequeos constantes para verificar la integridad de los datos y detectar lkos problemas a tiempo. Los discos y herramienats de almacenamiento con el tiempo pueden fallar. Las revisiones de integridad evitan cosas como necesitar datos de un repaldo y al intentar recupeararlos, darse cuenta que ya no es accesible porque el disco se deterioro y nadie se dioc uenta.
+* Puedes programar chequeos constantes para verificar la integridad de los datos y detectar lkos problemas a tiempo. Los discos y herramienats de almacenamiento con el tiempo pueden fallar. Las revisiones de integridad evitan cosas como necesitar datos de un repaldo y al intentar recupeararlos, ver que ya no es accesible porque el disco se deterioro y nadie se entero.
 
 
 ### Manejo de errores parciales (NO es un todo o nada)
@@ -70,31 +70,34 @@ BorgTUI NO aplica una regla de “todo o nada” para la lista de archivos y dir
 
 ### Enfoque de diseño
 
-BorgTUI automatiza las tareas que deben automatizarse, pero evita la automatización ciega: favorece la transparencia, la trazabilidad y la rapidez para diagnosticar y corregir problemas. Los backups se ejecutan automáticamente, registran su actividad y notifican al usuario cuando se requiere atención.
+* BorgTUI automatiza las tareas que deben automatizarse, pero evita la automatización ciega: favorece la transparencia, la trazabilidad y la rapidez para diagnosticar y corregir problemas. Los backups se ejecutan automáticamente, registran su actividad y notifican al usuario cuando se requiere atención.
 
+* Los procedimiento sencibles como la reparación del repositorio NO se automatizan, eso debe hacerse manualmente por ejemplo desde la TUI. Esto para evitar daños irreversibles en el repositorio y en el sistema.
 
 ### ¿Qué ofrece?
 
-Automatización de los respaldos con los archivos y directoriso seguún las condiciones fderotación que se especifiquen.
+* Automatización de los respaldos con los archivos y directoriso seguún las condiciones fderotación que se especifiquen.
 
-Rotación de los backups con politicas efectivas como guardar un backup de cada día y las ultimas 4 backups realizados recientemenete del día actual.
+* Rotación de los backups con politicas efectivas como guardar un backup de cada día y las ultimas 4 backups realizados recientemenete del día actual.
 
-Chqueos automaticos de la integridad de los datos con la posibilidad de reparación automatica si se encuentra alguna corrupción.
+* Chqueos rapidos y profundos automaticos y progranmables para valdiar la integridad de los datos.
 
-Visibilidad inmediata del estado de los respaldos sin necesidad de consultar cientos de logs en intentar entender que está bien y que está mal, que se respaldo y que no; puedes consultarlo todo en un mismo lugar (panel/TUI).
+* Herramienats en la TUI para cehqueos rapidos, rpofundos y reparación del repositorio que cuidan la integridad de los datos.
 
-Mensajes humanos y accionables que explican qué falló y por qué (no códigos crípticos como error125).
+* Visibilidad inmediata del estado de los respaldos sin necesidad de consultar cientos de logs en intentar entender que está bien y que está mal, que se respaldo y que no; puedes consultarlo todo en un mismo lugar (panel/TUI).
 
-Una interfaz de usuario en la terminal (TUI), para interactuar cone l sistema con comodidad, cambiar configuraciones, rvisar los estados, ejecutar los programas.
+* Mensajes humanos y accionables que explican qué falló y por qué (no códigos crípticos como error125).
 
-Capacidad para actuar y corregir desde una sola interfaz: revisar estados, ejecutar acciones y consultar información relevante sin buscar en múltiples archivos.
+* Una interfaz de usuario en la terminal (TUI), para interactuar cone l sistema con comodidad, cambiar configuraciones, rvisar los estados, ejecutar los programas.
 
-Notificaciones y avisos para que no enterarse del del fallo cuando ya sea demasiado tarde.
+* Capacidad para actuar y corregir desde una sola interfaz: revisar estados, ejecutar acciones y consultar información relevante sin buscar en múltiples archivos.
+
+* Notificaciones y avisos para que no enterarse del del fallo cuando ya sea demasiado tarde.
 
 
 ---
 
-## 2. Diseño y Arquitectura
+## 2. Arquitectura del Sistema
 
 ### 2.1 Estrategia de Encriptación: Eficiencia vs. Complejidad
 
@@ -148,16 +151,14 @@ compresión = N/A Comprime siempre en '.zip' por defecto.
 
 [102] #NO CAMBIAR ESTE ID, 102 siempre es el ID de la configuración de chequeo rapidos del repositorio.
 categoria = Chequeos Rapidos
-Frecuencia = 604800 #Cada semana
+frecuencia = 604800 #Cada semana
 retention = 52  #Guarda los registros de 1 año (52 semanas)
-Reparar = (True|Falase) # Establece si hacer reparaciones automaticas (True) o manuales (False)
 #compresión = N/A No comprime los registros por defecto.
 
 [103] #NO CAMBIAR ESTE ID, 103 siempre es el ID de la configuración de chequeo prfundo del repositorio.
 categoria = Chequeos Profundos
-Frecuencia = 2592000 # Cada mes
+frecuencia = 2592000 # Cada mes
 retention = 12  #Guarda los registros de 1 año (12 meses)
-Reparar = (True|Falase) # Establece si hacer reparaciones automaticas (True) o manuales (False)
 #compresión = N/A No comprime los registros por defecto.
 
 [ 103 - 105 ] #Son reservados para el sistema.
@@ -196,7 +197,6 @@ compresión = false
 * **retention:** Cantidad maxima de registros almacenados sobre los resultados de los chequeos.
 * **rutas:** Las ruta es donde se guarda los registros.
 * **compresión:** Por defecto no se comprimen considerando que cada registro ocupa poco espacio. Incluso el comando de chequeo no imprime datos si no encuentra problemas.
-* **reparar:** Establece si intentar una reparación por defecto si se detectan errores (True) o si hacerla solo manual (Repair)
 rutas = ~/Backups/Checks_BorgBackup
 
 **Los gripos 106 en adelante (Grupos del Usuario):**
@@ -511,15 +511,13 @@ Previene la corrupción de datos evitando que dos instancias del script (ej. lan
 # SECCIÓN 1: CONFIGURACIÓN DEL SISTEMA (IDs 100 al 105)
 # =============================================================================
 
-[100]
-categoria = Repositorio
+[100] # Repositorio
 # El destino físico donde se almacenarán todas las copias de seguridad.
 # Si la carpeta no existe, el script intentará crearla.
 rutas = ~/Backups/Borg-Backups/Repository
 encryption = none
 
-[101]
-categoria = Bitacora
+[101] # Bitacora
 # Frecuencia: Cada cuánto tiempo comprimir el log actual (Ej: 2592000 = 1 mes).
 frecuencia = 2592000 # Cada mes
 # Retención: Cuántos archivos .zip históricos conservar en la carpeta de logs.
@@ -527,18 +525,14 @@ retencion = 12
 # Ruta: Carpeta donde se guardarán los .zip (Si se deja vacío, el log se limpia pero no se guarda).
 rutas = ~/Backups/Borg-Backups/Logs
 
-[102]
-categoria = Chequeos Rapidos
-Frecuencia = 604800 #Cada semana
+[102] # Chequeos Rapidos
+frecuencia = 604800 #Cada semana
 retention = 52  #Guarda los registros de 1 año (52 semanas)
-Reparar = (True|Falase) # Establece si hacer reparaciones automaticas (True) o manuales (False)
 #compresión = N/A No comprime los registros por defecto.
 
-[103]
-categoria = Chequeos Profundos
-Frecuencia = 2592000 # Cada mes
+[103] # Chequeos Profundos
+frecuencia = 2592000 # Cada mes
 retention = 12  #Guarda los registros de 1 año (12 meses)
-Reparar = (True|Falase) # Establece si hacer reparaciones automaticas (True) o manuales (False)
 #compresión = N/A No comprime los registros por defecto.
 
 [104] # Sin asignar
@@ -563,7 +557,8 @@ Reparar = (True|Falase) # Establece si hacer reparaciones automaticas (True) o m
 #    Ejemplo de combinación: --keep-last 5 --keep-daily 7 --keep-monthly 2
 # -----------------------------------------------------------------------------
 
-#[106]
+#Ejemplo de una tarea valdia:
+#
 #categoria = Documentos y Proyectos
 #frecuencia = 3600
 #rutas = ~/Documents "/home/usuario/Proyectos Especiales"
@@ -641,13 +636,6 @@ Reparar = (True|Falase) # Establece si hacer reparaciones automaticas (True) o m
       * logra crearla y guarda la ruta en la variable. **LOG-LEVEL: WARM**.
       * NO logra crearla. **LOG-LEVEL: WARN** (FORZAR_NOTIF=true).
    * Si la ruta no esta especifica o no es accesible, informa y no guarda nada.**LOG-LEVEL: WARN** (FORZAR_NOTIF=true).
-
-
-### 4. Reparar (True|False = 0|1)
-
-* **Tratamiento:** El script normaliza la entrada a minúsculas.
-* **Lógica Binaria:** * `true` (en cualquier combinación de mayúsculas)  Se guarda **0** (Activado).
-* Cualquier otro valor (o vacío)  Se guarda **1** (Desactivado).
 
 
 ---
@@ -874,11 +862,9 @@ Ya que los logs (ID 101) y los chequeos (ID 102 y 103) se manejan de manera dist
 * Se limpia el archivo de logs (backups.log). **LOG-LEVEL: INFO**.
 
 #### Manejo de los chequeos (ID 102 y 103)
-1. **Condición de Activación:** `(tiempo_faltante_ID102 <= 0 || tiempo_faltante <= 0)`.
-2. **Proceso de Chequeo:**
-* Se realiza el proceso de chequeo y se registran lso resultados. **LOG-LEVEL: INFO**. Si hay algun error o advertencia se registra, se informa y se valida si el campo de `reparar` es tru o false, es decir, si se aplica o no la reparación automatica en estos casos.  **LOG-LEVEL: ERROR**. Si hay errores y las reparacioens se hacen de forma automatica y no se logra hrealziar la reparación con exito, se registra y s einforma.  **LOG-LEVEL: CRITIC**.
+1. **Condición de Activación:** `(tiempo_faltante_ID102 <= 0 || tiempo_falt* Se realiza el proceso de chequeo y se registran lso resultados. **LOG-LEVEL: INFO**. Si hay algun error o advertencia se registra, se informa y se valida si el campo de `reparar` es tru o false, es decir, si se aplica o no la reparación automatica en estos casos.  **LOG-LEVEL: ERROR**. Si hay errores y las reparacioens se hacen de forma automatica y no se logra hrealziar la reparación con exito, se registra y s einforma.  **LOG-LEVEL: CRITIC**.
 * Los archivos de registro deben guardarse con un diferenciador para los chequeos rapidos (ID_FAST), un diferenciador para los chequeps profundos (ID_DEEP) y en el caso de los registros de intentos de reparaciones que se realicen se usa otro identificador (ID_FIX) y estos archivos de reparación no se rotan ṕor defecto.
-* Se aplica la poda: Si hay más de `X` (retención) archivos de refgistros, se eliminan los logs del más antigupo al más reciente, hasta que `cantidad_logs == retention_logs`. **LOG-LEVEL: INFO**.
+* Se realiza el proceso de chequeo y se registran lso resultados. **LOG-LEVEL: INFO**. Si hay algun error o advertencia se registra **LOG-LEVEL: ERROR**. Si hay errores y las reparacioens se hacen de forma automatica y no se logra hrealziar la reparación con exito, se registra y sE informa. **LOG-LEVEL: CRITIC**.
 
 
 ---
