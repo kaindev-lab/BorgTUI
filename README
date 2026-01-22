@@ -1,10 +1,8 @@
 # auto-borgbackups-tui 🛡️
 
-![Status](https://img.shields.io/badge/Status-Beta-orange)
-![Resilience](https://img.shields.io/badge/Resilience-68%25-yellow)
-![License](https://img.shields.io/badge/License-MIT-green)
-
-> ⚠️ **IMPORTANTE:** Este proyecto se encuentra en fase **Beta**. Aunque la interfaz es altamente estable (85% UX), el motor lógico ha reportado un índice de resiliencia del 68% en las pruebas de estrés del 19-01-2026. Se recomienda para entornos de prueba o bajo supervisión.
+[![Version](https://img.shields.io/badge/Version-3.0.0--rc-green?style=for-the-badge&logo=git)](https://github.com/YOUR_USER/auto-borgbackups-tui/releases)
+[![License](https://img.shields.io/badge/License-MIT-yellow?style=for-the-badge)](LICENSE)
+[![Borg](https://img.shields.io/badge/Borg-Backup-blue?style=for-the-badge&logo=linux)](https://borgbackup.readthedocs.io/)
 
 ---
 
