@@ -161,20 +161,20 @@ frecuencia = 2592000 # Cada mes
 retention = 12  #Guarda los registros de 1 año (12 meses)
 #compresión = N/A No comprime los registros por defecto.
 
-[ 103 - 105 ] #Son reservados para el sistema.
+[ 104 - 110 ] #Son reservados para el sistema.
 
 
-# <=== REGISTROS DEL USUARIO VAN A PARTIR DE ESTE PUNTO (ID 106+) ===>
+# <=== REGISTROS DEL USUARIO VAN A PARTIR DE ESTE PUNTO (ID 111+) ===>
 
 
-[106]
+[111]
 categoria = Constante
 frecuencia = 900
 retencion = --keep-last 4 --keep-daily 7
 rutas = /home/user/Lab, /home/user/Work
 compresión = false
 
-[107]
+[112]
 categoria = Diario
 frecuencia = 86400
 retencion = --keep-daily 7
@@ -199,7 +199,9 @@ compresión = false
 * **compresión:** Por defecto no se comprimen considerando que cada registro ocupa poco espacio. Incluso el comando de chequeo no imprime datos si no encuentra problemas.
 rutas = ~/Backups/Checks_BorgBackup
 
-**Los gripos 106 en adelante (Grupos del Usuario):**
+* **Los grupos 104 a 110:** Son grupos reservados para futuras configuraciones del sistema.
+
+**Los grupos del usuario (IDs 111 en adelante)**
 * **ID:** Cabecera con identificador único numérico que vincula la configuración con el estado, permitiendo hacer cambios como el nombre de la categoria sin perder el historial.
 * **frecuencia:** Tiempo en segundos entre respaldos.
 * **retención:** Parámetros suados en el sistema 'BorgBackup' para la poda automática de archivos antiguos.
@@ -247,21 +249,21 @@ Este archivo es **gestionado automáticamente por el script**. Mantiene la memor
 **Ejemplo de estructura:**
 
 ```ini
-[106]
+[111]
 Categoria = Constantes
 ultimo_exito = 1704891600
 tiempo_trasncurrido = 902 #(15 minutos con 2 segundos)
 tiempo_faltante = -2 #(con frecuencia de cada 15 minutos, se necesita una respaldo hace 2 segundos)
 estado = PENDIENTE #(Requiere backup, pero no ha inciado el proceso de backup o esta en espera de en un backup en PROCESO, (ejm. ID=103))
 
-[107]
+[112]
 Categoria = Constantes
 ultimo_exito = 1704892500
 tiempo_trasncurrido = 1800 #(30 minutos)
 tiempo_faltante = -9000 #(con frecuencia de cada 15 minutos, se necesita una respaldo hace 2 segundos)
 estado = PENDIENTE #(Requiere backup, pero no ha inciado el proceso de backup o esta en espera de en un backup en PROCESO, (ejm. ID=103))
 
-[108]
+[113]
 Categoria = Diarios
 ultimo_exito = 1704891600
 tiempo_trasncurrido = 86.505 (1 día más 105 segundos)
@@ -493,82 +495,6 @@ Previene la corrupción de datos evitando que dos instancias del script (ej. lan
 
 
 4. **Fallo de Acceso:** Cualquier error de permisos en estos puntos detiene el script por seguridad. **LOG-LEVEL: CRITIC**.
-
-```ini
-# =============================================================================
-#            CONFIGURACIÓN DEL GESTOR DE BACKUPS (BORG_MANAGER)
-# =============================================================================
-# Este archivo define DÓNDE, CUÁNDO y QUÉ respaldar.
-#
-# TABLA DE REFERENCIA DE TIEMPO (Frecuencia en segundos):
-# -----------------------------------------------------------------------------
-# 15 Minutos = 900          | 1 Día (24h)  = 86400
-# 1 Hora     = 3600         | 1 Semana     = 604800
-# 6 Horas    = 21600        | 1 Mes        = 2592000
-# -----------------------------------------------------------------------------
-
-# =============================================================================
-# SECCIÓN 1: CONFIGURACIÓN DEL SISTEMA (IDs 100 al 105)
-# =============================================================================
-
-[100] # Repositorio
-# El destino físico donde se almacenarán todas las copias de seguridad.
-# Si la carpeta no existe, el script intentará crearla.
-rutas = ~/Backups/Borg-Backups/Repository
-encryption = none
-
-[101] # Bitacora
-# Frecuencia: Cada cuánto tiempo comprimir el log actual (Ej: 2592000 = 1 mes).
-frecuencia = 2592000 # Cada mes
-# Retención: Cuántos archivos .zip históricos conservar en la carpeta de logs.
-retencion = 12
-# Ruta: Carpeta donde se guardarán los .zip (Si se deja vacío, el log se limpia pero no se guarda).
-rutas = ~/Backups/Borg-Backups/Logs
-
-[102] # Chequeos Rapidos
-frecuencia = 604800 #Cada semana
-retention = 52  #Guarda los registros de 1 año (52 semanas)
-#compresión = N/A No comprime los registros por defecto.
-
-[103] # Chequeos Profundos
-frecuencia = 2592000 # Cada mes
-retention = 12  #Guarda los registros de 1 año (12 meses)
-#compresión = N/A No comprime los registros por defecto.
-
-[104] # Sin asignar
-
-[105] # Sin asignar
-
-# =============================================================================
-# SECCIÓN 2: TAREAS DE RESPALDO DE USUARIO (ID 106 en adelante)
-# =============================================================================
-# INSTRUCCIONES:
-# 1. ID: Debe ser único y empezar desde el ID 106.
-# 2. RUTAS: Separadas por espacios. 
-#    - Usa comillas para nombres con espacios: "/home/user/Mi Carpeta"
-#    - El símbolo '~' funciona fuera de comillas: ~/Documentos
-# 3. COMPRESION: 'True' (usa zstd,6 - lento pero pequeño) o 'False' (rápido).
-# 4. RETENCION: Define qué CONSERVAR. Borg borrará lo que no coincida.
-#    --keep-last N    : Guarda los últimos N respaldos.
-#    --keep-daily N   : Guarda 1 respaldo al día de los últimos N días.
-#    --keep-weekly N  : Guarda 1 respaldo por semana de las últimas N semanas.
-#    --keep-monthly N : Guarda 1 respaldo por mes de los últimos N meses.
-#
-#    Ejemplo de combinación: --keep-last 5 --keep-daily 7 --keep-monthly 2
-# -----------------------------------------------------------------------------
-
-#Ejemplo de una tarea valdia:
-#
-#categoria = Documentos y Proyectos
-#frecuencia = 3600
-#rutas = ~/Documents "/home/usuario/Proyectos Especiales"
-#retencion = --keep-last 5 --keep-daily 7
-#compression = True
-
-# >>> AÑADE TUS NUEVAS CATEGORÍAS A PARTIR DE AQUÍ <<<
-
-```
-
 
 
 ---
@@ -851,7 +777,7 @@ Luego de verificar la viabilidad de espacio del ID, se procede a crear el backup
 
 ### Casos Especiales 
 
-Ya que los logs (ID 101) y los chequeos (ID 102 y 103) se manejan de manera distinta a como se manejan las tareas a respaldar (IDs 106+), se crea un caso espacial para el manejo de los logs, que usan unas politicas de retención espacial.
+Ya que los logs (ID 101) y los chequeos (ID 102 y 103) se manejan de manera distinta a como se manejan las tareas a respaldar (IDs 111+), se crea un caso espacial para el manejo de los logs, que usan unas politicas de retención espacial.
 
 #### Manejo de la Bitácora (ID 101)
 
