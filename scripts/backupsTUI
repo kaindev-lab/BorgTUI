@@ -326,12 +326,17 @@ $STATE_INFO" 25 100
             REPO_PATH=$(sed -n '/^\[100\]/,/^\[/p' "$CONFIG_FILE" 2>/dev/null | grep "^rutas =" | cut -d'=' -f2- | sed 's/^[[:space:]]*//; s/[[:space:]]*$//' | tr -d '"' | sed "s|~|$HOME|")
 
             if [ -d "$REPO_PATH" ]; then
-                whiptail --infobox "Consultando Borg... Espere." 5 50
+		
+                clear; stty sane
+                echo "=== Consultar Estado del Repositorio ==="
                 # Capturamos STDERR también para ver errores de borg
+		printf "Consultando información del repositorio..."
                 BORG_INFO=$(borg info "$REPO_PATH" 2>&1)
                 # Eliminado el tail -n 10 para mostrar todo el historial [cite: 9]
-                BORG_LIST=$(borg list "$REPO_PATH" 2>&1) 
-                
+		printf "\nConsultando lista de de backups...\n\n"
+                BORG_LIST=$(borg list "$REPO_PATH" 2>&1)                 
+                pause_screen              
+
 		MSG="=== INFORMACIÓN GENERAL ===\n$BORG_INFO\n\n=== LISTADO DE BACKUPS (Puede desplazarse hacia abajo (↓) para más información) ===\n\n$BORG_LIST"
                 
                 echo -e "$MSG" > /tmp/borg_tui_info.txt
