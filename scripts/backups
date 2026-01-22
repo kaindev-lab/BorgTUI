@@ -273,8 +273,7 @@ rutas = ~/Backups/Borg-backups/Checks
 
 #Ejemplo de una tarea valdia:
 #
-# [111]
-#categoria = Documentos y Proyectos
+#[Documentos y Proyectos]
 #frecuencia = 3600
 #rutas = ~/Documents "/home/usuario/Proyectos Especiales"
 #retencion = --keep-last 5 --keep-daily 7
@@ -512,46 +511,88 @@ done
 # =============================================================================
 # FASE 2: SINCRONIZACIÓN DE LAS CONFIGURACIONES Y ESTADOS DEL PROGRAMA
 # =============================================================================
+
 log_msg "INFO" "SYSTEM" "Iniciando sincronización de estados (Fase 2)..."
+
+# Variables de control
+IDS_PROCESADOS=() # IDs totales en el archivo de configuraciones.
+IDS_OMITIDOS=() #IDs no validos
+COUNT_SYNC=0 #IDs sincronizados
 
 TEMP_STATE=$(mktemp)
 AHORA=$(date +%s)
-# Captura todos los de 3 dígitos pero quita el 100
-IDS_CONFIGURADOS=$(grep -oP '^\[[1-9][0-9]{2,}\]' "$STRIPPED_CONFIG" | grep -vE '\[100\]' | tr -d '[]')
 
-# Listas para separar los IDs
+
+# --- Filtrar los nombres de los grupos en las Configuraciones que no sean Validos ---
+
+
+# 1. Guardar el separador actual que delimita los strings obtenidos con grep y cambiarlo a solo salto de línea
+OLDIFS=$IFS
+IFS=$'\n'
+
+#2. Captura todos los IDS del archivo de configuracion (IDS del sistema y del usuario)
+IDS=( $(grep -oP '^\[.+\]' "$STRIPPED_CONFIG" | grep -vE '\[100\]' | tr -d '[]') )
+
+# 3. Restaurar el separador original (importante para el resto del script)
+IFS=$OLDIFS
+
+# Conteo de IDs totales en el archivo de configuración:
+IDS_PROCESADOS=$( echo "${#lista[@]}" )
+
+# Array para almacenar los IDs válidos
+IDS_VALIDOS=()
+
+# Expresión regular: solo permite letras, números, guiones y guiones bajos
+# ^ : inicio de cadena
+# [a-zA-Z0-9_-]+ : uno o más caracteres permitidos
+# $ : fin de cadena
+RE_VALIDA='^[a-zA-Z0-9_-]+$'
+
+for id in "${IDS[@]}"; do
+    if [[ "$id" =~ $RE_VALIDA ]]; then
+        IDS_VALIDOS+=("$id")
+    else
+        # Opcional: registrar en el log por qué se ignora el ID
+        log_msg "WARN" "ID_$id" "ID IGNORADO por caracteres no permitidos: ($ID_CHECK)" "true"
+	((IDS_OMITIDOS++))
+    fi
+done
+
+# Reemplazamos el array original por el filtrado
+IDS=("${IDS_VALIDOS[@]}")
+
+
+# --- Filtrar los IDs Unicos y Repetidos ---
+
+
+# Array para almacenar los IDs Unicos
 IDS_UNICOS=()
-IDS_REPETIDOS=()
 
 # Declaramos un array asociativo interno para la lógica de conteo
 declare -A contador_ids
 
 #Conteo de repeticiones
-for id in $IDS_CONFIGURADOS; do 
+for id in "${IDS[@]}"; do
         ((contador_ids[$id]++))
 done
 
 # Clasificación de IDs
-for id in $IDS_CONFIGURADOS; do        
+for id in "${IDS[@]}"; do
     if [[ "${contador_ids[$id]}" -eq 1 ]]; then
 	IDS_UNICOS+=("$id")
     elif [[ ! " ${IDS_REPETIDOS[@]} " =~ " $id " ]]; then
-	IDS_REPETIDOS+=("$id")
+        log_msg "WARN" "id_$id" "ID IGNORADO por estar reptido con el mismo nombre en la configuración" "true"
+	((IDS_OMITIDOS++))
     fi
 done
 
-# Variables de control para las siguientes fases
-IDS_PROCESADOS=()
-CONFIGS_PROCESADAS=()
-COUNT_SYNC=0
+# Reemplazamos el array original por el filtrado
+IDS=("${IDS_UNICOS[@]}")
 
-# Si hay IDs repetidos, informamos en bloque y no hacemos nada más con ellos.
-if [ ${#IDS_REPETIDOS[@]} -gt 0 ]; then
-    log_msg "WARN" "SYSTEM" "Se detectaron IDs duplicados que serán IGNORADOS: ${IDS_REPETIDOS[*]}"
-fi
+# ID number para las tareas del usuario
+number_id=111
 
-
-for ID in "${IDS_UNICOS[@]}"; do
+for ID in "${IDS[@]}"; do
     
     # --- 1. EXTRACCIÓN Y VALIDACIÓN DE DATOS ---
 
@@ -566,7 +607,7 @@ for ID in "${IDS_UNICOS[@]}"; do
         eval "RET=\$CHECK_RET_$ID"
         eval "RUTAS=\$CHECK_PATH_$ID"  # Ruta de históricos
         eval "REPARAR=\$CHECK_REPAIR_$ID"
-        COMP=1 # No aplica compresión para chequeos
+        COMP="N/A" # No aplica compresión para chequeos (False por defecto)
         
         # IMPORTANTE: No ejecutamos la validación de 'find' porque no son rutas de origen
 
@@ -578,14 +619,19 @@ for ID in "${IDS_UNICOS[@]}"; do
         FREQ=$LOG_FREQ
         RET=$LOG_RET
         RUTAS="$VALID_LOG_PATH"
-        COMP=1
-        
-    elif [[ "$ID" -ge 111 ]]; then
+        COMP="N/A" # No aplica compresión para la bitacora (True por defecto)
+       
+    elif [[ "ID" -gt "103" ]] && [[ "ID" -lt "111" ]]; then	
+        log_msg "WARN" "ID_$ID" "En las configuraciones una de las tareas tiene asignado un ID reservado (104-110)."
+        log_msg "INFO" "ID_$ID" "Las Categorias o IDs de las tareas del sistema tienen los ID del 100 al 110."
+        log_msg "INFO" "ID_$ID" "Las Categorias escritas entre corchetes '[]' de las tareas del sistema tienen los ID del 100 al 110."
+        log_msg "INFO" "ID_$ID" "Las categorias de las tareas del usuario no deben tener el nombre reservado con valores de 100 a 110."
+	continue 
+    else
         # ---------------------------------------------------------------------
         # CASO NORMAL: IDs 111+ (Tareas de Usuario)
         # ---------------------------------------------------------------------
-    
-        CAT=$(get_config_value "$STRIPPED_CONFIG" "$ID" "categoria")
+    	     
         F_RAW=$(get_config_value "$STRIPPED_CONFIG" "$ID" "frecuencia")
         C_RAW=$(get_config_value "$STRIPPED_CONFIG" "$ID" "compresion" | tr '[:upper:]' '[:lower:]')
         R_RAW=$(get_config_value "$STRIPPED_CONFIG" "$ID" "retencion")
@@ -631,7 +677,7 @@ for ID in "${IDS_UNICOS[@]}"; do
         # Nota: Pasamos el ID directamente, ya no necesitamos número de línea
         RUTAS=$(get_expanded_paths "$STRIPPED_CONFIG" "$ID")
 
-        # --- VALIDACIÓN DE ACCESIBILIDAD (Tu lógica find) ---
+        # --- VALIDACIÓN DE ACCESIBILIDAD ---
         RUTAS_EXISTENTES=""
         while IFS= read -r -d '' r; do
             if [ -e "$r" ]; then
@@ -660,12 +706,6 @@ for ID in "${IDS_UNICOS[@]}"; do
         fi
 
         log_msg "INFO" "ID_$ID" "Configuración Validada: Freq=${FREQ}s | Ret=${RET} | Rutas=${RUTAS}"
-    else
-
-        log_msg "WARN" "ID_$ID" "Se paso un ID de configuraciones sin comportamiento asignado."
-        log_msg "INFO" "ID_$ID" "Los IDs del sistema diseñados y configurados van del 100 al 110."
-        log_msg "INFO" "ID_$ID" "Los IDs de del usuario deben de ser igual o mayor a 111."
-	continue
     fi
 
     # --- 2. SINCRONIZACIÓN DE ESTADO ---
@@ -689,25 +729,49 @@ for ID in "${IDS_UNICOS[@]}"; do
 
     # --- 3. ESCRITURA AL ARCHIVO TEMPORAL ---
     {
-        echo "[$ID]"
-        echo "categoria = $CAT"
-        echo "frecuencia = $FREQ"
+	# Asignar un identificador a cada grupo
+	if [[ "$ID" =~ ^1(0[0-9]|10)$ ]]; then
+	    id="[$ID]"]
+	else
+            id="[$number_id]"
+            ((number_id++))
+	fi
+	echo $id
+	# Asignar una categoria	
+        case "$ID" in
+            "100") cat="Repositorio" ;;
+            "101") cat="Bitacora" ;;
+            "102") cat="Chequeo Rapido" ;;
+            "103") cat="Chequeo Profundo" ;;
+            *)     cat="$ID" ;;
+        esac        
+        echo "categoria = $cat"
+	echo "frecuencia = $FREQ"
         echo "retencion = $RET"
-        echo "rutas = $RUTAS"
-        [[ "$ID" != "101" ]] && echo "compresion = $COMP"
+        echo "rutas = $RUTAS"               
+        if [[ "$ID" =~ ^1(0[0-9]|10)$ ]]; then
+	    comp="N/A"]
+	else
+            comp="$COMP"
+	fi
+        echo "compresion = $comp"
         echo "ultimo_exito = $ULTIMO_E"
         echo "tiempo_trasncurrido = $T_TRANS"
         echo "tiempo_faltante = $T_FALTANTE"
         echo "estado = $ESTADO_E"
         echo ""
     } >> "$TEMP_STATE"
+    
+    log_msg "INFO" "$ID" "Sincronización del grupo finalizada. Asignado con el ID_$id"
+    log_msg "INFO" "ID_$id" "Nueva tarea creada: | categoria: $cat | frecuencia: $FREQ | retencion: $RET | rutas: $RUTAS | compresion: $comp | ultimo_exito: $ULTIMO_E | tiempo_transcurrido: $T_TRANS | tiempo_faltante: $T_FALTANTE | estado: $ESTADO_E |"
 
     ((COUNT_SYNC++))
 done
 
 # Finalización
 mv "$TEMP_STATE" "$STATE_FILE"
-log_msg "INFO" "SYSTEM" "Sincronización finalizada. IDs procesados: $COUNT_SYNC. IDs Repetidos (ignorados): ${#IDS_REPETIDOS[@]}"
+log_msg "INFO" "SYSTEM" "Sincronización finalizada. IDs procesados: $IDS_PROCESADOS. IDs sincronizados: $COUNT_SYNC. IDs Invalidos (ignorados): $IDS_OMITIDOS"
+
 
 # =============================================================================
 # FASE 3: ACTUALIZACIÓN Y PROCESAMIENTO DE LOS ESTADOS PARA CREAR BACKUPS
