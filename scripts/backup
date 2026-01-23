@@ -248,7 +248,7 @@ rutas = ~/Backups/Borg-Backups/Checks
 frecuencia = 2592000 # Cada mes
 retencion = 12  #Guarda los registros de 1 año (12 meses)
 compresión = # N/A No comprime los registros por defecto.
-rutas = ~/Backups/Borg-backups/Checks
+rutas = ~/Backups/Borg-Backups/Checks
 
 
 # Sin asignar: [104-110]
