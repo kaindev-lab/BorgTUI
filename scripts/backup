@@ -731,7 +731,7 @@ for ID in "${IDS[@]}"; do
     {
 	# Asignar un identificador a cada grupo
 	if [[ "$ID" =~ ^1(0[0-9]|10)$ ]]; then
-	    id="[$ID]"]
+	    id="[$ID]"
 	else
             id="[$number_id]"
             ((number_id++))
@@ -914,15 +914,16 @@ else
 	# Obtenemos el repositorio sobre el que se va a trabajar
 	repo_dir=$(get_expanded_paths "$STRIPPED_CONFIG" "100" | sed 's/\"//g') #la ruta viene con comillas en state y da problemas con borg, pro eso se eliminan	    
 
+	# Obtenemos los datos de cada id para procesarlos luego
+	frec_actual=$(grep -A 10 "^\[$id\]" "$STATE_FILE" | grep "^frecuencia =" | awk '{print $3}')
+	retencion=$(grep -A 10 "^\[$id\]" "$STATE_FILE" | grep "^retencion =" | cut -d'=' -f2- | xargs)
+	compresion=$(grep -A 10 "^\[$id\]" "$STATE_FILE" | grep "^compresion =" | awk '{print $3}')
+
         # ---------------------------------------------------------------------
         # CASO ESPECIAL 1: MANTENIMIENTO DE LOGS (ID 101)
         # ---------------------------------------------------------------------
         if [[ "$id" == "101" ]]; then
             log_msg "INFO" "SYSTEM" "Iniciando mantenimiento de registros (ID 101)"
-            
-            # 1. Obtener parámetros actuales del estado
-            # Usamos la variable global VALID_LOG_PATH definida en la validación inicial
-            limite=$(grep -A 9 "\[101\]" "$STATE_FILE" | grep "^retencion =" | cut -d'=' -f2- | xargs)
             
             # 2. Validación de condiciones para el respaldo
             if [[ -z "$VALID_LOG_PATH" || "$VALID_LOG_PATH" == "null" ]]; then
@@ -931,7 +932,7 @@ else
                 ahora_unix=$(date +%s)
                 sed -i "/^\[101\]/,/^$/ { s/^estado =.*/estado = REALIZADO/; s/^ultimo_exito =.*/ultimo_exito = $ahora_unix/ }" "$STATE_FILE"
                 
-            elif [[ "$limite" -le 0 ]]; then
+            elif [[ "$retencion" -le 0 ]]; then
                 log_msg "WARN" "ID_101" "Respaldo omitido: La retención está configurada en 0."
                 ahora_unix=$(date +%s)
                 sed -i "/^\[101\]/,/^$/ { s/^estado =.*/estado = REALIZADO/; s/^ultimo_exito =.*/ultimo_exito = $ahora_unix/ }" "$STATE_FILE"
@@ -975,8 +976,7 @@ else
             
             # 1. Configuración de variables específicas
             # Nota: En la Fase 2 guardamos la ruta de históricos en el campo 'rutas' para estos IDs
-            log_path=$(grep -A 9 "^\[$id\]" "$STATE_FILE" | grep "^rutas =" | cut -d'=' -f2- | xargs)
-            retencion=$(grep -A 9 "^\[$id\]" "$STATE_FILE" | grep "^retencion =" | awk '{print $3}')
+            log_path=$(get_expanded_paths "$STATE_FILE" "$id")
             
             # Definir tipo de chequeo. Siempre con la opción de --verbose para dejar registrado el proceso.
             if [ "$id" == "102" ]; then
@@ -1033,15 +1033,17 @@ else
                 ls -1tr "$log_path"/check_ID_${TYPE_TAG}_*.log 2>/dev/null | head -n "$to_delete" | xargs -d '\n' rm -f
                 log_msg "INFO" "ID_$id" "Se eliminaron $to_delete registros antiguos."
             fi
-
+	    
             # Actualizar estado a REALIZADO                
-            ahora_unix=$(date +%s)
-            sed -i "/^\[$id\]/,/^$/ { 
+	    ahora_unix=$(date +%s)
+	    
+	    sed -i "/^\[$id\]/,/^$/ { 
 	        s/^estado =.*/estado = REALIZADO/
 	        s/^ultimo_exito =.*/ultimo_exito = $ahora_unix/
 	        s/^tiempo_trasncurrido =.*/tiempo_trasncurrido = 0/
-		s/^tiempo_faltante =.*/tiempo_faltante = $frec_actual/
-	    }" "$STATE_FILE"ed -i "/^\[$id\]/,/^$/ { s/^estado =.*/estado = REALIZADO/; s/^ultimo_exito =.*/ultimo_exito = $ahora_unix/ }" "$STATE_FILE"
+	        s/^tiempo_faltante =.*/tiempo_faltante = $frec_actual/
+	    }" "$STATE_FILE"
+
 
             continue # Importante: Saltar al siguiente ID para no ejecutar backup normal
         fi
@@ -1111,7 +1113,7 @@ else
 
         if [ "$free_bytes" -lt "$requerido" ]; then
             faltante=$(( requerido - free_bytes ))
-	    human_faltante=$(format_bytes $faltantes)
+	    human_faltante=$(format_bytes $faltante)
             log_msg "CRITIC" "ID_$id" "Espacio insuficiente. Faltan $human_faltante bytes para cumplir el margen de seguridad. Saltando ID."
 
             # Rollback: Liberar ID para reintento futuro
@@ -1125,13 +1127,9 @@ else
 	# PASO 3: Ejecución de Borg Create
         # ---------------------------------------------------------------------
         
-        # A. Extraer parámetros específicos de ejecución del .state
-        comp=$(grep -A 9 "^\[$id\]" "$STATE_FILE" | grep "^compresion =" | awk '{print $3}')
-        # Para la retención, usamos cut para tomar todo lo que sigue al '='
-        retencion=$(grep -A 9 "^\[$id\]" "$STATE_FILE" | grep "^retencion =" | cut -d'=' -f2- | xargs)
         
-        # B. Configurar Flag de Compresión
-        if [ "$comp" = "0" ]; then
+       # A. Configurar Flag de Compresión
+        if [ "$compresion" = "0" ]; then
             COMP_FLAG="zstd,6"
             log_msg "INFO" "ID_$id" "Compresión activada: zstd,6 (Equilibrado)"
         else
@@ -1139,12 +1137,12 @@ else
             log_msg "INFO" "ID_$id" "Compresión desactivada (none)"
         fi
 
-        # C. Definir nombre del archivo (Timestamp + ID)
+        # B. Definir nombre del archivo (Timestamp + ID)
         ARCHIVE_NAME="$(date +'%Y-%m-%d_%H%M')_ID_${id}"
         
         log_msg "INFO" "ID_$id" "Iniciando transferencia a Borg: $ARCHIVE_NAME"
 
-        # D. Ejecución de borg create
+        # C. Ejecución de borg create
         # Usamos eval para que se expandan correctamente las rutas entrecomilladas en $rutas	
 	eval "borg create --progress --compression=$COMP_FLAG $repo_dir::$ARCHIVE_NAME $rutas 2> >(tee -a $LOG_FILE >&2)"
         
@@ -1153,7 +1151,6 @@ else
 	if [ $CREATE_EXIT -eq 0 ]; then
 	    ahora_unix=$(date +%s)
 	    # Extraemos la frecuencia para el reseteo
-	    frec_actual=$(grep -A 9 "^\[$id\]" "$STATE_FILE" | grep "^frecuencia =" | awk '{print $3}')
 	
 	    borg info "$repo_dir::$ARCHIVE_NAME" 2>&1 | tee -a "$LOG_FILE"
 	    log_msg "INFO" "ID_$id" "Respaldo creado exitosamente."
