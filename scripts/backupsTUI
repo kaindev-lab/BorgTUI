@@ -208,18 +208,19 @@ while true; do
     fi
 
     # 2. Construir Dashboard (Incluyendo firma al final)
-    DASHBOARD_TEXT="Estado de los Backups:\n"
+    DASHBOARD_TEXT="\nEstado de los Backups:\n"
     DASHBOARD_TEXT+="--------------------------------\n"
     DASHBOARD_TEXT+="Tareas Totales : $TOTAL_TAREAS\n"
     DASHBOARD_TEXT+="En Proceso     : $EN_PROCESO\n"
     DASHBOARD_TEXT+="Pendientes     : $PENDIENTES\n"
     DASHBOARD_TEXT+="Realizados     : $REALIZADOS\n"
     DASHBOARD_TEXT+="--------------------------------\n"
-    DASHBOARD_TEXT+="Gestor by kaindev | Powered by BorgBackups"
+    DASHBOARD_TEXT+="Gestor by kaindev | Powered by BorgBackups\n\n"
 
-    # 3. Menú Principal (Ajustado alto a 23 y items visibles a 7)
+
+    # 3. Menú Principal (Añadida opción 10)
     OPTION=$(whiptail --title "Gestor Automatizado de Backups" \
-    --menu "$DASHBOARD_TEXT" 25 78 10 \
+    --menu "$DASHBOARD_TEXT" 28 85 11 \
     "1" "Visualizar Registros (Logs)" \
     "2" "Estado de las tareas (Backups)" \
     "3" "Estado del Repositorio" \
@@ -229,7 +230,9 @@ while true; do
     "7" "Chequeo Rápido (Estructura)" \
     "8" "Chequeo Profundo (Datos)" \
     "9" "Reparación de Repositorio" \
-    "0" "Salir" 3>&1 1>&2 2>&3)
+    "10" "Configurar Ubicación Orquestador" \
+    "0" "Salir" 3>&1 1>&2 2>&3)	   
+
 
     if [ $? != 0 ]; then OPTION="0"; fi
 
@@ -254,67 +257,75 @@ while true; do
             if [ ! -f "$STATE_FILE" ]; then
                 whiptail --msgbox "El archivo de estado aún no existe.\nEjecute un backup primero." 10 60
             else
-                STATE_INFO=$(awk -F' = ' '
-                    # Función para convertir segundos a formato humano (2 unidades consecutivas)
-                    function formatear_tiempo(s) {
-                        if (s < 0) s = -s;
-                        if (s == 0) return "0";
-                        
-                        if (s <= 60) return s " seg";
-                        
-                        if (s <= 3600) { # Minutos + Segundos
-                            m = int(s / 60); seg = s % 60;
-                            return m " min " seg " seg";
-                        }
-                        if (s <= 86400) { # Horas + Minutos
-                            h = int(s / 3600); m = int((s % 3600) / 60);
-                            return h " h " m " min";
-                        }
-                        if (s <= 604800) { # Semanas + Días
-                            d = int(s / 86400); h = int((s % 86400) / 3600);
-                            return d " d " h " h";
-                        }
-                        if (s <= 2592000) { # Semanas + Días
-                            sem = int(s / 604800); d = int((s % 604800) / 86400);
-                            return sem " sem " d " d";
-                        }
-                        # Meses + Semanas
-                        mes = int(s / 2592000); sem = int((s % 2592000) / 604800);
-                        return mes " mes " sem " sem";
-                    }
-
-                    /^\[/ { id=$0; gsub(/\[|\]/, "", id); next }
-                    /^categoria/ { cat=$2 }
-                    /^estado/ { st=$2 }
-                    /^tiempo_faltante/ { fl=$2 }
-                    /^ultimo_exito/ { 
-                        ue=$2; 
-                        if(ue=="0" || ue=="") date="NUNCA"; 
-                        else { cmd="date -d @"ue" \"+%y-%m-%d %H:%M\""; cmd | getline date; close(cmd) }
-                    }
-                    /^$/ { 
-                        if (id != "100" && id != "") {
-                            # Lógica de columnas según el valor de "fl" (tiempo_faltante)
-                            if (fl > 0) {
-                                proximo = formatear_tiempo(fl);
-                                atraso = "0";
-                            } else {
-                                proximo = "0";
-                                atraso = formatear_tiempo(fl);
+		while true; do
+                    STATE_INFO=$(awk -F' = ' '
+                        # Función para convertir segundos a formato humano (2 unidades consecutivas)
+                        function formatear_tiempo(s) {
+                            if (s < 0) s = -s;
+                            if (s == 0) return "0";
+                            
+                            if (s <= 60) return s " seg";
+                            
+                            if (s <= 3600) { # Minutos + Segundos
+                                m = int(s / 60); seg = s % 60;
+                                return m " min " seg " seg";
                             }
-
-                            printf "ID %-3s | %-18.18s | %-10.10s | %-14s | %-15s | %-15s\n", id, cat, st, date, proximo, atraso
+                            if (s <= 86400) { # Horas + Minutos
+                                h = int(s / 3600); m = int((s % 3600) / 60);
+                                return h " h " m " min";
+                            }
+                            if (s <= 604800) { # Semanas + Días
+                                d = int(s / 86400); h = int((s % 86400) / 3600);
+                                return d " d " h " h";
+                            }
+                            if (s <= 2592000) { # Semanas + Días
+                                sem = int(s / 604800); d = int((s % 604800) / 86400);
+                                return sem " sem " d " d";
+                            }
+                            # Meses + Semanas
+                            mes = int(s / 2592000); sem = int((s % 2592000) / 604800);
+                            return mes " mes " sem " sem";
                         }
-                        # Limpiar variables para la siguiente sección
-                        fl=0; cat=""; st=""; ue=""; date="";
-                    }
-                ' "$STATE_FILE")
-
-                # Ajustamos el ancho a 115 para dar cabida a las nuevas columnas
-                whiptail --title "Detalle de Tareas" --scrolltext --msgbox \
-"ID     | Categoría          | Estado     | Último Éxito   | Próximo Backup  | Atraso         
-----------------------------------------------------------------------------------------
-$STATE_INFO" 25 100
+    
+                        /^\[/ { id=$0; gsub(/\[|\]/, "", id); next }
+                        /^categoria/ { cat=$2 }
+                        /^estado/ { st=$2 }
+                        /^tiempo_faltante/ { fl=$2 }
+                        /^ultimo_exito/ { 
+                            ue=$2; 
+                            if(ue=="0" || ue=="") date="NUNCA"; 
+                            else { cmd="date -d @"ue" \"+%y-%m-%d %H:%M\""; cmd | getline date; close(cmd) }
+                        }
+                        /^$/ { 
+                            if (id != "100" && id != "") {
+                                # Lógica de columnas según el valor de "fl" (tiempo_faltante)
+                                if (fl > 0) {
+                                    proximo = formatear_tiempo(fl);
+                                    atraso = "0";
+                                } else {
+                                    proximo = "0";
+                                    atraso = formatear_tiempo(fl);
+                                }
+    
+                                printf "ID %-3s | %-18.18s | %-10.10s | %-14s | %-15s | %-15s |\n", id, cat, st, date, proximo, atraso
+                            }
+                            # Limpiar variables para la siguiente sección
+                            fl=0; cat=""; st=""; ue=""; date="";
+                        }
+                    ' "$STATE_FILE")
+		    if whiptail --title "Detalle de Tareas (Tiempo Real)" \
+                            --scrolltext \
+                            --yes-button "Actualizar" \
+                            --no-button "Volver" \
+                            --yesno \
+"ID     | Categoría          | Estado     | Último Éxito   | Próximo Backup  | Atraso          |
+-----------------------------------------------------------------------------------------------
+$STATE_INFO" 25 100; then
+                        continue # El usuario pulsó Actualizar, el ciclo repite y AWK recalcula
+                    else
+                        break    # El usuario pulsó Volver, salimos del ciclo
+                    fi
+                done
             fi
             ;;
 
@@ -454,6 +465,19 @@ $STATE_INFO" 25 100
                 echo "=== BORG CHECK: REPAIR ==="
                 borg check --verbose --progress --repair "$REPO_PATH"
                 pause_screen
+            fi
+            ;;
+
+	10)
+            # --- CONFIGURAR PANEL (ORQUESTADOR) ---
+            log_tui_action "INFO" "Usuario solicitó reconfigurar la ruta del orquestador."
+            
+            # Reutilizamos la función de la Fase 2 [cite: 15, 23]
+            if configure_orchestrator; then
+                log_tui_action "INFO" "Configuración actualizada. Nueva ruta: $ORCHESTRATOR_PATH"
+                whiptail --title "Éxito" --msgbox "La ubicación del orquestador se ha actualizado correctamente." 10 60
+            else
+                log_tui_action "INFO" "Cambio de configuración cancelado por el usuario."
             fi
             ;;
 

@@ -273,7 +273,7 @@ rutas = ~/Backups/Borg-backups/Checks
 
 #Ejemplo de una tarea valdia:
 #
-#[Documentos y Proyectos]
+#[Documentos_y_Proyectos]
 #frecuencia = 3600
 #rutas = ~/Documents "/home/usuario/Proyectos Especiales"
 #retencion = --keep-last 5 --keep-daily 7
@@ -953,8 +953,13 @@ else
         
                     # 5. Actualizar Estado
                     ahora_unix=$(date +%s)
-                    sed -i "/^\[101\]/,/^$/ { s/^estado =.*/estado = REALIZADO/; s/^ultimo_exito =.*/ultimo_exito = $ahora_unix/ }" "$STATE_FILE"
-                else
+                    sed -i "/^\[$id\]/,/^$/ { 
+	                s/^estado =.*/estado = REALIZADO/
+			s/^ultimo_exito =.*/ultimo_exito = $ahora_unix/
+			s/^tiempo_trasncurrido =.*/tiempo_trasncurrido = 0/
+			s/^tiempo_faltante =.*/tiempo_faltante = $frec_actual/
+		    }" "$STATE_FILE"
+		else
                     log_msg "ERROR" "ID_101" "Error técnico al intentar crear el archivo ZIP en $VALID_LOG_PATH."
                     sed -i "/^\[101\]/,/^$/ { s/^estado =.*/estado = PENDIENTE/ }" "$STATE_FILE"
                 fi
@@ -992,25 +997,26 @@ else
                 mkdir -p "$log_path"
             fi
 
-            # 2. Ejecución del Chequeo
+            # 2. Ejecución del Chequeo con progreso en pantalla y log limpio
             TIMESTAMP=$(date +%Y%m%d_%H%M%S)
             LOG_FILE_CHECK="$log_path/check_ID_${TYPE_TAG}_${TIMESTAMP}.log"
             
             log_msg "INFO" "ID_$id" "Ejecutando Borg Check... Salida en: $LOG_FILE_CHECK"
             
-            # Ejecutamos y capturamos salida tanto en archivo como en variable para evaluar
-            # Usamos 2>&1 para capturar errores también
-            borg check $BORG_OPTS "$repo_dir" > "$LOG_FILE_CHECK" 2>&1
-            CHECK_EXIT=$?
+            # Ejecución:
+            # --progress para ver el avance en la terminal
+            # 2>&1 redirige todo al pipe
+            # tee muestra en pantalla
+            # sed 's/\r/\n/g' limpia los retornos de carro de la barra de progreso para que el log sea legible
+            borg check --progress $BORG_OPTS "$repo_dir" 2>&1 | tee >(sed 's/\r/\n/g' > "$LOG_FILE_CHECK")
+            
+            CHECK_EXIT=${PIPESTATUS[0]}
 
             # 3. Evaluación de Resultados
             if [ $CHECK_EXIT -eq 0 ]; then
                 log_msg "INFO" "ID_$id" "Chequeo finalizado con ÉXITO. Integridad verificada."
                 
-                # Actualizar estado a REALIZADO
-                ahora_unix=$(date +%s)
-                sed -i "/^\[$id\]/,/^$/ { s/^estado =.*/estado = REALIZADO/; s/^ultimo_exito =.*/ultimo_exito = $ahora_unix/ }" "$STATE_FILE"
-
+                
             else
                 log_msg "CRITIC" "ID_$id" "Problemas detectados durante el chequeo (Exit Code: $CHECK_EXIT). Ver detalle en logs."                                
             fi
@@ -1028,9 +1034,14 @@ else
                 log_msg "INFO" "ID_$id" "Se eliminaron $to_delete registros antiguos."
             fi
 
-                # Actualizar estado a REALIZADO
-                ahora_unix=$(date +%s)
-		sed -i "/^\[$id\]/,/^$/ { s/^estado =.*/estado = REALIZADO/; s/^ultimo_exito =.*/ultimo_exito = $ahora_unix/ }" "$STATE_FILE"
+            # Actualizar estado a REALIZADO                
+            ahora_unix=$(date +%s)
+            sed -i "/^\[$id\]/,/^$/ { 
+	        s/^estado =.*/estado = REALIZADO/
+	        s/^ultimo_exito =.*/ultimo_exito = $ahora_unix/
+	        s/^tiempo_trasncurrido =.*/tiempo_trasncurrido = 0/
+		s/^tiempo_faltante =.*/tiempo_faltante = $frec_actual/
+	    }" "$STATE_FILE"ed -i "/^\[$id\]/,/^$/ { s/^estado =.*/estado = REALIZADO/; s/^ultimo_exito =.*/ultimo_exito = $ahora_unix/ }" "$STATE_FILE"
 
             continue # Importante: Saltar al siguiente ID para no ejecutar backup normal
         fi
@@ -1135,17 +1146,25 @@ else
 
         # D. Ejecución de borg create
         # Usamos eval para que se expandan correctamente las rutas entrecomilladas en $rutas	
-        eval "borg create --compression=$COMP_FLAG $repo_dir::$ARCHIVE_NAME $rutas 2>> $LOG_FILE"
+	eval "borg create --progress --compression=$COMP_FLAG $repo_dir::$ARCHIVE_NAME $rutas 2> >(tee -a $LOG_FILE >&2)"
         
-	if [ $? -eq 0 ]; then
-            ahora_unix=$(date +%s)
-            log_msg "INFO" "ID_$id" "Respaldo creado exitosamente."
-            
-            # Actualizamos éxito y estado antes de podar
-            sed -i "/^\[$id\]/,/^$/ { 
-                s/^estado =.*/estado = REALIZADO/
-                s/^ultimo_exito =.*/ultimo_exito = $ahora_unix/
-            }" "$STATE_FILE"
+        CREATE_EXIT=${PIPESTATUS[0]}
+
+	if [ $CREATE_EXIT -eq 0 ]; then
+	    ahora_unix=$(date +%s)
+	    # Extraemos la frecuencia para el reseteo
+	    frec_actual=$(grep -A 9 "^\[$id\]" "$STATE_FILE" | grep "^frecuencia =" | awk '{print $3}')
+	
+	    borg info "$repo_dir::$ARCHIVE_NAME" 2>&1 | tee -a "$LOG_FILE"
+	    log_msg "INFO" "ID_$id" "Respaldo creado exitosamente."
+	
+	    # Actualización completa de 4 campos
+	    sed -i "/^\[$id\]/,/^$/ { 
+	        s/^estado =.*/estado = REALIZADO/
+	        s/^ultimo_exito =.*/ultimo_exito = $ahora_unix/
+	        s/^tiempo_trasncurrido =.*/tiempo_trasncurrido = 0/
+	        s/^tiempo_faltante =.*/tiempo_faltante = $frec_actual/
+	    }" "$STATE_FILE"
 
             # ---------------------------------------------------------------------
             # PASO 4: Ejecución de Borg Prune (Limpieza)
@@ -1153,8 +1172,7 @@ else
             log_msg "INFO" "ID_$id" "Iniciando limpieza (Prune) con política: $retencion"
             
             # Ejecutamos prune filtrando por el ID para no borrar backups de otras tareas
-            eval "borg prune --glob-archives *_ID_${id} $retencion $repo_dir 2>> $LOG_FILE"
-        
+       	    eval "borg prune --list --glob-archives *_ID_${id} $retencion $repo_dir 2>&1 | tee -a $LOG_FILE" 
             
             if [ $? -eq 0 ]; then
                 log_msg "INFO" "ID_$id" "Limpieza finalizada correctamente."

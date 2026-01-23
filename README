@@ -836,22 +836,29 @@ Podría consultar las validaciones de dependencias registradas en los logs para 
 
 #### Opciones del Usuario
 
-El menú interactivo permite:
+El panel TUI permite gestionar todo el ciclo de vida de tus respaldos desde una única interfaz:
 
-1. **Visualizar Registros:** Acceso al monitor de logs en tiempo real (backups.log).
-2. **Estado del Sistema:** Resumen de tareas pendientes y ejecutadas (backups.config).
-3. **Mantenimiento:** Consultas de integridad y listado del repositorio Borg.
-4. **Configurar Tareas:** Apertura del editor para el archivo `.conf` de backups.
-5. **Ejecución Manual:** Lanzamiento forzado del orquestador.
-0. **Salir**
+1. Visualizar Registros (Logs): Monitorización en tiempo real del archivo backups.log para depuración y seguimiento.
 
-### Mejoras Futuras
+2. Estado de las Tareas: Tabla detallada con tiempos de ejecución, cálculos de próximo backup y retrasos (basado en el archivo .state).
 
-Para simplificar el uso a perfiles no técnicos, se planea implementar:
+3. Estado del Repositorio: Listado detallado de los archivos (archives) almacenados actualmente en el repositorio de Borg.
 
-* **Selección Visual:** Integración con gestores de archivos para añadir rutas de respaldo mediante selección directa.
-* **Formularios Guiados:** Creación y edición de tareas (IDs) mediante asistentes que eliminen la necesidad de editar archivos de texto manualmente.
+4. Configurar Tareas: Acceso directo al editor de texto para modificar el archivo de configuración .conf.
 
+5. Ejecución Manual: Lanzamiento forzado del orquestador para procesar tareas pendientes de inmediato.
+
+6. Créditos e Información: Detalles del desarrollador, versión del software y licencias.
+
+7. Chequeo Rápido: Verificación técnica de la estructura del repositorio y consistencia de los índices.
+
+8. Chequeo Profundo: Validación bit a bit de los bloques de datos respaldados (operación de lectura intensiva).
+
+9. Reparación de Repositorio: Herramienta de recuperación para corregir inconsistencias o errores en la base de datos de Borg.
+
+10. Configurar Orquestador: Ajuste dinámico de la ruta donde se encuentra el script de ejecución (orchestrator.sh).
+
+0. Salir: Cierre seguro de la interfaz.
 
 ---
 
