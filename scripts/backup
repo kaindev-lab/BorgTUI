@@ -120,16 +120,15 @@ log_msg() {
     echo -e "${color}${linea}\e[0m"
     echo "$linea" >> "$LOG_FILE"
 
-# Desabilito als notificaciones vsuales mientras depuro el script.
-#    # 2. Notificación Visual
-#    if [[ "$HAS_NOTIFY" == true && "$HAS_DISPLAY" == true ]]; then
-#        if [[ "$nivel" == "ERROR" || "$nivel" == "CRITIC" || "$forzar" == "true" ]]; then
-#            notify-send -u critical "Borg Manager - $nivel - $contexto" "$mensaje"
-#        fi
-#    elif [[ "$nivel" == "ERROR" || "$nivel" == "CRITIC" ]]; then
-#         # LOG-LEVEL: WARN si se esperaba notificar pero no hay medios
-#         echo "[$timestamp] [WARN] [SYSTEM] : Notificación visual omitida (Sin interfaz o notify-send)." >> "$LOG_FILE"
-#    fi
+    # 2. Notificación Visual
+    if [[ "$HAS_NOTIFY" == true && "$HAS_DISPLAY" == true ]]; then
+        if [[ "$nivel" == "ERROR" || "$nivel" == "CRITIC" || "$forzar" == "true" ]]; then
+            notify-send -u critical "Borg Manager - $nivel - $contexto" "$mensaje"
+        fi
+    elif [[ "$nivel" == "ERROR" || "$nivel" == "CRITIC" ]]; then
+         # LOG-LEVEL: WARN si se esperaba notificar pero no hay medios
+         echo "[$timestamp] [WARN] [SYSTEM] : Notificación visual omitida (Sin interfaz o notify-send)." >> "$LOG_FILE"
+    fi
 }
 
 
