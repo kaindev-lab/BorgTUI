@@ -139,6 +139,11 @@ log_msg() {
 # Todas las rutas que se procesan con la función get_expanded_paths,
 # siempre son guardadas entre comillas, sea una o varias por ID.
 # Tened esto en cuenta para los susos futuros y evitar dolores de cabeza.
+# Bash interpreta las comillas dentro de una variable como texto.
+# Para que bash interprete las comillas como contenedores y no como texto:
+# 	eval: obliga a reinterpretar el contenido de la variable.
+# 	crear una lista: interpreta las comillas y crea las rutas como items.
+# 	eliminar comillas: en casos de 1 sola ruta.
 # =============================================================================
 
 
@@ -340,8 +345,8 @@ log_msg "INFO" "SYSTEM" "Entorno validado."
 # NIVEL 3: INFRAESTRUCTURA DEL REPOSITORIO (ID 100)
 # =============================================================================
 
-# Limpiamos la ruta (quitamos comillas y expandimos ~)
-REPO_PATH=$(get_expanded_paths "$STRIPPED_CONFIG" "100" | sed 's/\"//g')
+# Limpiamos la ruta (expandimos ~ y quitamos las comillas)
+REPO_PATH=$(get_expanded_paths "$STRIPPED_CONFIG" "100" | tr -d '"')
 
 if [ -z "$REPO_PATH" ] || [ "$REPO_PATH" == "null" ]; then
     log_msg "CRITIC" "ID_100" "La ruta del repositorio no está definida en el .conf"
@@ -397,7 +402,7 @@ fi
 # Uso: get_config_value "id_seccion" "nombre_campo"
 LOG_FREQ_RAW=$(get_config_value "$STRIPPED_CONFIG" "101" "frecuencia")
 LOG_RET_RAW=$(get_config_value "$STRIPPED_CONFIG" "101" "retencion")
-LOG_REPO_PATH=$(get_expanded_paths "$STRIPPED_CONFIG" "101" | sed 's/\"//g')
+LOG_REPO_PATH=$(get_expanded_paths "$STRIPPED_CONFIG" "101" | tr -d '"')
 
 # 2. Validación de Integridad de los datos numéricos
 if [[ "$LOG_FREQ_RAW" =~ ^[0-9]+$ ]]; then
@@ -450,7 +455,7 @@ for id_check in 102 103; do
     # 1. Extracción de valores
     C_FREQ_RAW=$(get_config_value "$STRIPPED_CONFIG" "$id_check" "frecuencia")
     C_RET_RAW=$(get_config_value "$STRIPPED_CONFIG" "$id_check" "retencion")
-    C_PATH_RAW=$(get_expanded_paths "$CONFIG_FILE" "$id_check" | sed 's/\"//g')
+    C_PATH_RAW=$(get_expanded_paths "$CONFIG_FILE" "$id_check" | tr -d '"')
 
     # 2. Validación de Datos (Frecuencia y Retención)
     if [[ "$C_FREQ_RAW" =~ ^[0-9]+$ ]]; then
@@ -976,7 +981,7 @@ else
             
             # 1. Configuración de variables específicas
             # Nota: En la Fase 2 guardamos la ruta de históricos en el campo 'rutas' para estos IDs
-            log_path=$(get_expanded_paths "$STATE_FILE" "$id")
+            log_path=$(get_expanded_paths "$STATE_FILE" "$id" | tr -d '"')
             
             # Definir tipo de chequeo. Siempre con la opción de --verbose para dejar registrado el proceso.
             if [ "$id" == "102" ]; then
