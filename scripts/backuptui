@@ -226,11 +226,12 @@ while true; do
     "3" "Estado del Repositorio" \
     "4" "Configurar Tareas (.conf)" \
     "5" "Ejecución Manual (Forzar Backups)" \
-    "6" "Créditos e Información" \
-    "7" "Chequeo Rápido (Estructura)" \
-    "8" "Chequeo Profundo (Datos)" \
-    "9" "Reparación de Repositorio" \
-    "10" "Configurar Ubicación Orquestador" \
+    "6" "Chequeo Rápido (Estructura)" \
+    "7" "Chequeo Profundo (Datos)" \
+    "8" "Reparación de Repositorio" \
+    "9" "Configurar Ubicación Orquestador" \
+    "10" "Programar ejecución automtica" \
+    "11" "Mas Informacion" \
     "0" "Salir" 3>&1 1>&2 2>&3)	   
 
 
@@ -400,23 +401,7 @@ $STATE_INFO" 25 100; then
             fi
             ;;
 
-	6)
-            # --- CRÉDITOS E INFORMACIÓN ---
-            log_tui_action "INFO" "Usuario visualizando créditos."
-            INFO="SISTEMA DE GESTIÓN DE BACKUPS\n"
-            INFO+="----------------------------------------------\n\n"
-            INFO+="Desarrollado por: kaindev\n"
-            INFO+="Motor de Backups: BorgBackups\n"
-            INFO+="Sitio Web Borg: https://www.borgbackup.org\n\n"
-            INFO+="Este proyecto busca mejorar la orquestación\n"
-            INFO+="de copias de seguridad automáticas simples y seguras.\n\n"
-            INFO+="GitHub: https://github.com/kaindev-lab/BorgTUI\n"
-            INFO+="Versión: 1.0.0 (2026)"
-            
-            whiptail --title "Acerca del Proyecto" --msgbox "$INFO" 18 65
-            ;;
-
-        7)
+        6)
             # --- CHEQUEO RÁPIDO ---
             log_tui_action "INFO" "Usuario inició Chequeo Rápido con progreso."
             REPO_PATH=$(sed -n '/^\[100\]/,/^\[/p' "$CONFIG_FILE" 2>/dev/null | grep "^rutas =" | cut -d'=' -f2- | sed 's/^[[:space:]]*//; s/[[:space:]]*$//' | tr -d '"' | sed "s|~|$HOME|")
@@ -442,7 +427,7 @@ $STATE_INFO" 25 100; then
             fi
             ;;
 
-        8)
+        7)
             # --- CHEQUEO PROFUNDO ---
             log_tui_action "INFO" "Usuario inició Chequeo Profundo."
             REPO_PATH=$(sed -n '/^\[100\]/,/^\[/p' "$CONFIG_FILE" 2>/dev/null | grep "^rutas =" | cut -d'=' -f2- | sed 's/^[[:space:]]*//; s/[[:space:]]*$//' | tr -d '"' | sed "s|~|$HOME|")
@@ -455,7 +440,7 @@ $STATE_INFO" 25 100; then
             fi
             ;;
 
-        9)
+        8)
             # --- REPARACIÓN ---
             log_tui_action "WARN" "Usuario accedió a Reparación de datos."
             REPO_PATH=$(sed -n '/^\[100\]/,/^\[/p' "$CONFIG_FILE" 2>/dev/null | grep "^rutas =" | cut -d'=' -f2- | sed 's/^[[:space:]]*//; s/[[:space:]]*$//' | tr -d '"' | sed "s|~|$HOME|")
@@ -468,7 +453,7 @@ $STATE_INFO" 25 100; then
             fi
             ;;
 
-	10)
+	9)
             # --- CONFIGURAR PANEL (ORQUESTADOR) ---
             log_tui_action "INFO" "Usuario solicitó reconfigurar la ruta del orquestador."
             
@@ -481,6 +466,26 @@ $STATE_INFO" 25 100; then
             fi
             ;;
 
+        10)
+	    # --- PROGRAMAR LA EJECUCIÓN EN EL CRON ---
+	    crontab -e
+	    ;;
+	
+	11)
+            # --- CRÉDITOS E INFORMACIÓN ---
+            log_tui_action "INFO" "Usuario visualizando créditos."
+            INFO="SISTEMA DE GESTIÓN DE BACKUPS\n"
+            INFO+="----------------------------------------------\n\n"
+            INFO+="Desarrollado por: kaindev\n"
+            INFO+="Motor de Backups: BorgBackups\n"
+            INFO+="Sitio Web Borg: https://www.borgbackup.org\n\n"
+            INFO+="Este proyecto busca mejorar la orquestación\n"
+            INFO+="de copias de seguridad automáticas simples y seguras.\n\n"
+            INFO+="GitHub: https://github.com/kaindev-lab/BorgTUI\n"
+            INFO+="Versión: 1.0.0 (2026)"
+            
+            whiptail --title "Acerca del Proyecto" --msgbox "$INFO" 18 65
+            ;;
         0)
             log_tui_action "INFO" "Salida del panel."
             clear
