@@ -922,6 +922,7 @@ else
 	frec_actual=$(grep -A 10 "^\[$id\]" "$STATE_FILE" | grep "^frecuencia =" | awk '{print $3}')
 	retencion=$(grep -A 10 "^\[$id\]" "$STATE_FILE" | grep "^retencion =" | cut -d'=' -f2- | xargs)
 	compresion=$(grep -A 10 "^\[$id\]" "$STATE_FILE" | grep "^compresion =" | awk '{print $3}')
+	ultimo_exito=$(grep -A 10 "^\[$id\]" "$STATE_FILE" | grep "^ultimo_exito =" | awk '{print $3}')
 
         # ---------------------------------------------------------------------
         # CASO ESPECIAL 1: MANTENIMIENTO DE LOGS (ID 101)
@@ -940,8 +941,26 @@ else
                 log_msg "WARN" "ID_101" "Respaldo omitido: La retención está configurada en 0."
                 ahora_unix=$(date +%s)
                 sed -i "/^\[101\]/,/^$/ { s/^estado =.*/estado = REALIZADO/; s/^ultimo_exito =.*/ultimo_exito = $ahora_unix/ }" "$STATE_FILE"
-                
-            else
+            
+	    #Si es la primer vez que se ejecuta el sistema, no es necesario hacer el respaldo, de hecho njo dbería hacerse para que los logs de la primer ejecución esten a la mano y no se repalden los logs de apenas unos minutos y vacie el registro
+
+echo "--------------------------------------------------------------"	
+echo "[AUD1]: EL ULTMIO EXITO DEL RESPALDO DE LOGS ES: ($ultimo_exito)"
+echo "--------------------------------------------------------------"	
+
+            elif [[ "$ultimo_exito" -eq 0 ]]; then
+                log_msg "WARN" "ID_101" "Respaldo omitido: Nunca antes se han realizado respaldos (poca información para respaldar)."
+                ahora_unix=$(date +%s)
+                sed -i "/^\[101\]/,/^$/ { s/^estado =.*/estado = REALIZADO/; s/^ultimo_exito =.*/ultimo_exito = $ahora_unix/ }" "$STATE_FILE"
+
+echo "--------------------------------------------------------------"	
+echo "[AUD2]: SE VALIO QUE EL ULTIMO EXITOE RA 0"
+echo "--------------------------------------------------------------"	
+    
+		else
+echo "--------------------------------------------------------------"	
+echo "[AUD3]: NO SE VALIO QUE EL ULTIMO EXITOE RA 0"
+echo "--------------------------------------------------------------"	
                 # 3. Proceder con el respaldo (Condiciones cumplidas)
                 zip_name="log_backup_$(date +%Y%m%d_%H%M%S).zip"
                 log_msg "INFO" "ID_101" "Condiciones óptimas. Creando respaldo: $zip_name"
