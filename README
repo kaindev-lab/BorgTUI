@@ -6,27 +6,24 @@
 
 ---
 
-## Introducción
+## 1. Introducción
 
-### ¿Qué es BorgTUI?
+### La importancia de un gestor de backups automáticos
 
-BorgTUI es un orquestador interactivo para backups, que hace más accesible y confiables los respaldos en uno de los motores de backups más potentes y probados en la actualidad (BorgBackups). Diseñado para la persona que desean o necesitan tener sus datos en seguros y respaldados, sea un PC personal, un servidor o cualquier otro dispositivo con un sistema Linux integrado. No es un “ponlo a correr y olvídate”: su propósito es que puedas operar, supervisar y confiar en que tus backups se realizan de forma segura. Puedes automatizar los backups y los chequeos, todo de forma simple e intuitiva. 
+Recientemente me di cuenta de que no basta con hacer respaldos manuales cada cierto tiempo o usar controles de versiones en los proyectos.
 
-### ¿Por qué se creo este proyecto?
+Hay mucha información y proyectos que usamos en el día a día y que podemos perder en cualquier momento. Incluso cosas tan simples como el orden en el que se presentan y guardan los archivos y directorios pueden requerir mucho tiempo de organización, y ese trabajo se puede perder en cualquier momento, incluso si toda la información está respaldada. Eso fue lo que me pasó recientemente.
 
-Este proyecto nace de una lección aprendida por la vía difícil: **usar backups manual no es fiable.** Incluso contando con sistemas robustos y años de información protegida, el trabajo del "día a día" es el más vulnerable. Realizar copias de seguridad manualmente es tedioso y propenso al olvido. Un error accidental o un fallo de hardware pueden borrar semanas de progreso si el último respaldo o algun gestor de versiones no lo uncluia.
+Para evitar perder esta información valiosa, creé un sistema propio de gestión de backups. Se llama **BorgTUI**.
 
+Existen muchas opciones para manejar respaldos de forma automática y segura, pero no encontré nada que fuera simple, intuitivo y seguro, además de usable en cualquier entorno. Hay herramientas simples que siguen la filosofía *“set and forget”*, pero esto no me da confianza: no quiero asumir que todo funciona sin saberlo, ni estar revisando logs todos los días para detectar errores. Prefiero que el sistema se autorregule y me avise cuando ocurra un problema que requiera intervención, usando los logs solo cuando sea necesario y haciendo revisiones periódicas.
 
-## ¿Qué diferencia este proyecto de otros gestores?
+También hay herramientas con este enfoque que incluso incluyen una GUI y notificaciones, pero quería algo que pudiera usar cómodamente desde mi entorno principal de trabajo (la terminal), tanto en un PC como en un servidor. Por eso diseñé este proyecto con una interfaz basada en terminal (TUI); de ahí el nombre **BorgTUI**.
 
-Hay mcuhas herramientas para gestionar backups, algunas Interfaz Grafica de Usuario (GUI), otras que solo existen en la Temrinal (CLI); unas que siguen una filosofia de "fire and gorget" (ejecuta y olvidate) con confianza ciega en el funcionamiento del sistema y en que las configuraciones sean validas, otras que usan motores distintos a Borg... pero entre tantas opciones, BorgTUI se enfoca en que el sistema sea accesible para el usuario, que de confianza, tranquilidad y que permita conocer en todo momento el estado del sistema mediante notificaciones o un panel central con Interfaz de usuario en la terminal, desde donde se pueda gestionar todo de forma facil y rapida; que podamos concoer que esta pasando, si hay algun problema, y que podamos resolver esos problemas o cambiar las configuraciones mediante unos menus simples e intuitivos. BorgTUI puede correr en practicamente cualquier dispositivo con un Sistema Linux integrado, sea un PC personal, o incluso en un servidor que no tiene interfaz gráfica. Además, el sistema esta diseñado de manera simple, intuitiva, facil de desarrollar y de mantener. Es además, un sistema libre y abierto para que cualquiera pueda unirse o sacarle provecho para gestionar sus proyectos y datos de manera segura y con la tranquilidad de tener su información bien respaldada.    
-
-### Propósito
-
-Los backups solo valen si sabes que funcionan. BorgTUI evita la falsa tranquilidad de procesos silenciosos que fallan en secreto: desde el primer momento el operador debe entender qué está pasando, recibir avisos claros cuando algo no funciona y disponer de herramientas sencillas para investigar y corregir problemas. La prioridad es garantizar confianza operacional, no solo ejecutar tareas en segundo plano.
+Espero que mi experiencia y este proyecto no solo me sean útiles a mí, sino también a cualquiera que quiera mantener su información segura y tener la tranquilidad de que está respaldada, con la posibilidad de programar respaldos, revisiones de integridad, realizar reparaciones, supervisar el proceso y gestionar todo desde una interfaz simple e intuitiva.
 
 
-### Pilares fundamentales
+### Pilares fundamentales del Sistema
 
 **Simple:** Configuración y uso pensados para ser directos; menos fricción significa menos errores humanos.
 
@@ -53,7 +50,13 @@ Los backups solo valen si sabes que funcionan. BorgTUI evita la falsa tranquilid
 * Puedes programar chequeos constantes para verificar la integridad de los datos y detectar lkos problemas a tiempo. Los discos y herramienats de almacenamiento con el tiempo pueden fallar. Las revisiones de integridad evitan cosas como necesitar datos de un repaldo y al intentar recupeararlos, ver que ya no es accesible porque el disco se deterioro y nadie se entero.
 
 
-### Manejo de errores parciales (NO es un todo o nada)
+### Enfoque de diseño
+
+* BorgTUI automatiza las tareas que deben automatizarse, pero evita la automatización ciega: favorece la transparencia, la trazabilidad y la rapidez para diagnosticar y corregir problemas. Los backups se ejecutan automáticamente, registran su actividad y notifican al usuario cuando se requiere atención.
+
+* Los procedimiento sencibles como la reparación del repositorio NO se automatizan, eso debe hacerse manualmente por ejemplo desde la TUI. Esto para evitar daños irreversibles en el repositorio y en el sistema.
+
+#### Manejo de errores parciales (NO es un todo o nada)
 
 BorgTUI NO aplica una regla de “todo o nada” para la lista de archivos y directorios a respaldar. No pone en riesgo el 99% de tus datos por un 1% inaccesible. Si un backup incluye, por ejemplo, 10 directorios y uno no es accesible, BorgTUI realiza el respaldo de los 9 directorios que sí están disponibles y marca claramente el directorio faltante. Esa información queda registrada en los logs, se muestra en la TUI y, si está configurado, se notifica al operador. De esta forma:
 
@@ -65,12 +68,6 @@ BorgTUI NO aplica una regla de “todo o nada” para la lista de archivos y dir
 
 **Los directorios y archivos individuales si son un todo o nada:** el motor BorgBackups si usa la politica de "todo o nada" en los backups, si ocurre un problema en la creación del backup, el backup no se crea incompleto, solo se crean los backus si todo sale bien. 
 
-
-### Enfoque de diseño
-
-* BorgTUI automatiza las tareas que deben automatizarse, pero evita la automatización ciega: favorece la transparencia, la trazabilidad y la rapidez para diagnosticar y corregir problemas. Los backups se ejecutan automáticamente, registran su actividad y notifican al usuario cuando se requiere atención.
-
-* Los procedimiento sencibles como la reparación del repositorio NO se automatizan, eso debe hacerse manualmente por ejemplo desde la TUI. Esto para evitar daños irreversibles en el repositorio y en el sistema.
 
 ### ¿Qué ofrece?
 
