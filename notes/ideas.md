@@ -41,6 +41,17 @@
 
 - Para que el sistema no se llegue a relentizar cuando se realizan los backups, estos deberían de ejecutarse con el comando nice y con una prioridad baja que no use recursos que el sistema esta suando para otras cosas, así eso implique que los abckups tarden más en realizarse.
 
+- En el sistema se sigue usando mucho la obtención de datos con 'grep A' que es poco segura, flexible y eficiente, asíq ue sería mejor remplazarla por funciones más robustas como las definidas al incio del orquestador.
+
+- El problema de awk vs cut con los espacios
+
+    Observación: En sync_state_times extraes valores usando awk '{print $3}'.
+
+    Peligro: Si por alguna razón una ruta o un valor tiene espacios (ejemplo: compresion = zstd 6), awk solo agarrará "zstd".
+
+    Regla de oro: Usa siempre cut -d'=' -f2- | xargs para todos los campos. Es más lento por milisegundos, pero es 100% seguro contra espacios.
+    
+- La opción de actualizar la ventana de estados, podría no solo consultar el archivo de estados, sino realizar calculos propios basado en la hora actual, pues el archivo de estados se actualiza solo cuando se ejecuta el script orquestador.
 
 **Mejoras TUI:**
 
