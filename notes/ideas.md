@@ -50,10 +50,13 @@
     Peligro: Si por alguna razón una ruta o un valor tiene espacios (ejemplo: compresion = zstd 6), awk solo agarrará "zstd".
 
     Regla de oro: Usa siempre cut -d'=' -f2- | xargs para todos los campos. Es más lento por milisegundos, pero es 100% seguro contra espacios.
-    
-- La opción de actualizar la ventana de estados, podría no solo consultar el archivo de estados, sino realizar calculos propios basado en la hora actual, pues el archivo de estados se actualiza solo cuando se ejecuta el script orquestador.
 
-**Mejoras TUI:**
+- El sistema no esta detectando cuando hay cambios en la ifnromación de un grupo por respaldar, por ejemplo si añado una carpeta nueva a la lista de rutas. Debería de hacer una validación extra que compare la información de los grupos del archivo de configuraciones y el archivo de estados y si detecta un cambio, que actualice el archivo de estado y lo pase a estado PENDIENTE para que el sistema procese el nuevo cambio.
+
+
+**Mejoras TUI**
+
+- La opción de actualizar la ventana de estados, podría no solo consultar el archivo de estados, sino realizar calculos propios basado en la hora actual, pues el archivo de estados se actualiza solo cuando se ejecuta el script orquestador.
 
 Para simplificar el uso a perfiles no técnicos, se planea implementar:
 
