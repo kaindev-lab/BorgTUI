@@ -92,12 +92,18 @@ format_bytes() {
     }'
 }
 
-
 # Verificación de Acceso a la interfaz grafica.
-HAS_NOTIFY=false # programa para notificaiones.
-HAS_DISPLAY=false # intefaz grafica disponible.
+HAS_NOTIFY=false
+HAS_DISPLAY=false
+
 [ -x "$(command -v notify-send)" ] && HAS_NOTIFY=true
-[[ -n "$DISPLAY" || -n "$WAYLAND_DISPLAY" ]] && HAS_DISPLAY=true
+
+if [[ -n "$DISPLAY" || -n "$WAYLAND_DISPLAY" ]]; then
+    HAS_DISPLAY=true
+elif [[ -S "/run/user/$(id -u)/bus" ]]; then
+    export DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$(id -u)/bus"
+    HAS_DISPLAY=true
+fi
 
 # FUNCIÓN DE INFORMACIÓN UNIFICADA
 log_msg() {
@@ -121,13 +127,24 @@ log_msg() {
     echo "$linea" >> "$LOG_FILE"
 
     # 2. Notificación Visual
-    if [[ "$HAS_NOTIFY" == true && "$HAS_DISPLAY" == true ]]; then
-        if [[ "$nivel" == "ERROR" || "$nivel" == "CRITIC" || "$forzar" == "true" ]]; then
+    if [[ "$nivel" == "ERROR" || "$nivel" == "CRITIC" || "$forzar" == "true" ]]; then
+        if [[ "$HAS_NOTIFY" == true && "$HAS_DISPLAY" == true ]]; then
+            # Caso de éxito: Ambos medios disponibles
             notify-send -u critical "Borg Manager - $nivel - $contexto" "$mensaje"
+        else
+            # Caso de fallo: Identificar la causa exacta
+            local razon="Desconocida"
+            
+            if [[ "$HAS_NOTIFY" == false && "$HAS_DISPLAY" == false ]]; then
+                razon="Falta binario 'notify-send' Y no se detectó entorno gráfico"
+            elif [[ "$HAS_NOTIFY" == false ]]; then
+                razon="El binario 'notify-send' no está instalado"
+            elif [[ "$HAS_DISPLAY" == false ]]; then
+                razon="No hay una sesión gráfica activa (DISPLAY/WAYLAND no detectado)"
+            fi
+
+            echo "[$timestamp] [WARN] [SYSTEM] : Notificación visual omitida ($razon)." >> "$LOG_FILE"
         fi
-    elif [[ "$nivel" == "ERROR" || "$nivel" == "CRITIC" ]]; then
-         # LOG-LEVEL: WARN si se esperaba notificar pero no hay medios
-         echo "[$timestamp] [WARN] [SYSTEM] : Notificación visual omitida (Sin interfaz o notify-send)." >> "$LOG_FILE"
     fi
 }
 
