@@ -945,9 +945,35 @@ El script solo despertará una vez por hora. Aunque tú querías backups cada 15
 
 ---
 
-### D. Recomendación para el uso del Cron
+### D. Requisito Crítico: Especificación del Intérprete
 
-Para un equilibrio simple, configura tu Cron en `*/15 * * * * /ruta/al/script.sh`
+Para que el orquestador funcione correctamente dentro de Cron, es **obligatorio** especificar el uso de `bash`.
+
+#### ¿Por qué es necesario?
+
+Por defecto, Cron utiliza `/bin/sh` para ejecutar las tareas. En sistemas modernos (como Debian o Ubuntu), `/bin/sh` apunta a un intérprete simplificado llamado **Dash**.
+
+* El orquestador utiliza sintaxis avanzada (como los corchetes dobles `[[ ]]`) que Dash no reconoce.
+* Si no especificas el intérprete, el script fallará al validar archivos o procesos, entrando en bucles de error.
+
+#### Configuración correcta
+
+Al añadir la línea a tu `crontab -e`, asegúrate de anteponer `/bin/bash` a la ruta del script:
+
+```cron
+# FORMA CORRECTA: Especificando bash
+* * * * * /bin/bash /ruta_al_orchestrator
+
+# FORMA INCORRECTA (Dará errores):
+* * * * * /ruta_al_orchestrator
+
+```
+
+---
+
+### E. Recomendación para el uso del Cron
+
+Para un equilibrio simple, configura tu Cron en `*/15 * * * * /bin/bash /ruta_al_orchestrator.sh`
 
 Esto permite que el sistema revise tareas frecuentemente sin consumir recursos innecesarios. Si tienes backups muy pesados o carpetas con muchos archivos, este margen de 15 minutos le da tiempo al script para validar permisos y espacio en disco antes de que Borg inicie la transferencia.
 
