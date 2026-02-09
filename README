@@ -29,7 +29,7 @@ Espero que mi experiencia y este proyecto no solo me sean útiles a mí, sino ta
 
 * Una configuración simple y facil de entender.
 
-* Una logica del sistema enfocada en la simpleza funcional, con una documenatción ordenado y dividido por seccioen sy objetivos.
+* Una logica del sistema enfocada en la simpleza funcional, con una documenatción ordenado y dividido por secciones y objetivos.
 
 **Intuitivo:** Interfaz y mensajes diseñados para personas.
 
@@ -37,7 +37,7 @@ Espero que mi experiencia y este proyecto no solo me sean útiles a mí, sino ta
 
 * Cuenta con una interfaz de usuario en la terminal (TUI) par facilitar la interacción cone l sisrtema.
 
-* Retroalimentación constante y gumana para saber que pasa y por qué.
+* Retroalimentación constante y humana para saber que pasa y por qué.
 
 **Seguro / Resiliente:** 
 
@@ -47,7 +47,7 @@ Espero que mi experiencia y este proyecto no solo me sean útiles a mí, sino ta
 
 * Incluye validaciones y correcciones de seguridad:  valida acceso a los datos por respaldar, configuraciones válidas, comprobación de espacio en disco antes de realizar los backups, manejo de valores de emergencia para políticas de rotación, frecuencia y compresión cuando estos datos no son válidos o no sé específican.
 
-* Puedes programar chequeos constantes para verificar la integridad de los datos y detectar lkos problemas a tiempo. Los discos y herramienats de almacenamiento con el tiempo pueden fallar. Las revisiones de integridad evitan cosas como necesitar datos de un repaldo y al intentar recupeararlos, ver que ya no es accesible porque el disco se deterioro y nadie se entero.
+* Puedes programar chequeos constantes para verificar la integridad de los datos y detectar los problemas a tiempo. Los discos y herramienats de almacenamiento con el tiempo pueden fallar. Las revisiones de integridad evitan cosas como necesitar datos de un repaldo y al intentar recupeararlos, ver que ya no es accesible porque el disco se deterioro y nadie se entero.
 
 
 ### Enfoque de diseño
@@ -69,25 +69,13 @@ BorgTUI NO aplica una regla de “todo o nada” para la lista de archivos y dir
 **Los directorios y archivos individuales si son un todo o nada:** el motor BorgBackups si usa la politica de "todo o nada" en los backups, si ocurre un problema en la creación del backup, el backup no se crea incompleto, solo se crean los backus si todo sale bien. 
 
 
-### ¿Qué ofrece?
+### ¿Qué ofrece BorgTUI?
 
-* Automatización de los respaldos con los archivos y directoriso seguún las condiciones fderotación que se especifiquen.
+BorgTUI no es solo un script de respaldo; es un ecosistema diseñado para ofrecer control total sobre la información sin complicaciones. El sistema gestiona automáticamente la automatización y rotación de backups, aplicando políticas efectivas (como conservar copias diarias y los últimos 4 respaldos del día) para asegurar que siempre exista una versión reciente y disponible.
 
-* Rotación de los backups con politicas efectivas como guardar un backup de cada día y las ultimas 4 backups realizados recientemenete del día actual.
+Aquí la prioridad es la integridad de los datos. Por ello, el sistema integra chequeos automáticos, rápidos y profundos, junto con herramientas de reparación accesibles directamente desde la interfaz. En lugar de lidiar con códigos crípticos como el "error 125", el usuario recibe mensajes humanos y accionables que explican con claridad qué sucedió y cómo solucionarlo.
 
-* Chqueos rapidos y profundos automaticos y progranmables para valdiar la integridad de los datos.
-
-* Herramienats en la TUI para cehqueos rapidos, rpofundos y reparación del repositorio que cuidan la integridad de los datos.
-
-* Visibilidad inmediata del estado de los respaldos sin necesidad de consultar cientos de logs en intentar entender que está bien y que está mal, que se respaldo y que no; puedes consultarlo todo en un mismo lugar (panel/TUI).
-
-* Mensajes humanos y accionables que explican qué falló y por qué (no códigos crípticos como error125).
-
-* Una interfaz de usuario en la terminal (TUI), para interactuar cone l sistema con comodidad, cambiar configuraciones, rvisar los estados, ejecutar los programas.
-
-* Capacidad para actuar y corregir desde una sola interfaz: revisar estados, ejecutar acciones y consultar información relevante sin buscar en múltiples archivos.
-
-* Notificaciones y avisos para que no enterarse del del fallo cuando ya sea demasiado tarde.
+Todo esto se centraliza en una interfaz de terminal (TUI) intuitiva. Desde este panel único es posible monitorear el estado de salud de los repositorios, ajustar configuraciones y ejecutar acciones correctivas sin tener que bucear en archivos de log interminables. Además, el sistema mantiene la visibilidad mediante notificaciones visuales, permitiendo atender cualquier inconveniente antes de que se convierta en una pérdida de datos real.
 
 
 ---
@@ -169,7 +157,7 @@ rutas = /home/user/Lab, /home/user/Work
 compresión = false
 
 [Diario] #Segunda tarea (sistema asigna el id 112)
-frecuencia = 86400 #respaldo cada v34 horas
+frecuencia = 86400 #respaldo cada 24 horas
 retencion = --keep-daily 7
 rutas = /home/user/Archive, /home/user/Work/System
 compresión = false
@@ -232,9 +220,11 @@ Para mantener la flexibilidad, en el archivo `backups.conf` utilizaremos la **si
 `retencion = --keep-daily 7 --keep-weekly 4 --keep-monthly 6`
 *Esto guardará: los últimos 7 diarios, 4 semanales y 6 mensuales.*
 
-**3. ¿Por qué usamos la misma sintaxis de Borg?**
+**3. Sintaxis de Borg**
 
-* **Sin Traducción:** El script no tiene que procesar la lógica de "qué significa diario"; Borg ya lo sabe.
+El script usa la misma sintaxis de borg para mejorar la integración y compatibilidad con este. Esto permite:
+
+* **No hay una capa extra de conversion:** El script no tiene que procesar la lógica de "qué significa diario"; Borg ya lo sabe.
 * **Flexibilidad Total:** Si mañana quieres usar `--keep-yearly`, solo lo escribes en el `.conf` y el script lo aplicará automáticamente sin que tengamos que programar nada nuevo.
 * **Validación Simple:** Como definimos en el **Nivel 4**, solo verificamos que la cadena empiece con `--keep-`.
 
@@ -357,7 +347,7 @@ Para que el sistema sea resiliente, organizado, facil de usar y mantener, el scr
 
 ### F. Herramientas Necesarias (Dependencias)
 
-Antes de iniciar la Fase 1, el script debe validar la existencia de estas herramientas en el `$PATH`. La ausencia de cualquiera de ellas (excepto las opcionales) activará un bloqueo de ejecución.
+Antes de iniciar la Fase 1, el script debe validar la existencia de estas herramientas en el `$PATH`. La ausencia de cualquiera de ellas activará un bloqueo de ejecución", podrías poner algo como "Si falta alguna de estas herramientas, el script se detendrá para evitar errores.
 
 #### 1. Herramientas Críticas (Sin ellas, el script falla)
 
@@ -407,7 +397,7 @@ Primeras valdiaciones del sistema que eprmiten identificar el estado del sistema
 
 ---
 
-### Nivel -1: Inicialización de Canales (Pre-validación de Comunicación)
+### Nivel -1: Preparación del Sistema (Pre-validación de Comunicación)
 
 Este nivel garantiza que el sistema pueda informar de sus procesos. Si falla, el script no puede registrar errores ni procesos, por lo que aborta inmediatamente.
 
@@ -948,8 +938,6 @@ El script solo despertará una vez por hora. Aunque tú querías backups cada 15
 ### D. Requisito Crítico: Especificación del Intérprete
 
 Para que el orquestador funcione correctamente dentro de Cron, es **obligatorio** especificar el uso de `bash`.
-
-#### ¿Por qué es necesario?
 
 Por defecto, Cron utiliza `/bin/sh` para ejecutar las tareas. En sistemas modernos (como Debian o Ubuntu), `/bin/sh` apunta a un intérprete simplificado llamado **Dash**.
 
