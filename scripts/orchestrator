@@ -58,7 +58,7 @@ get_config_value() {
     # 1. Filtramos el bloque de la sección
     # 2. Buscamos el campo exacto (añadimos ^ para inicio de línea)
     # 3. Tomamos solo el primer resultado, en caso que haya resultados sueltos comoc uando se comenta los otros IDS en el CONFIG_FILE.
-    # 4. Obtenemos el valor siguiente aignado ('= asignado')
+    # 4. Obtenemos el valor siguiente asignado ('= asignado')
     # 5. Convertimos a parametro validos con xargs, que interpeta bien los espacios en la retención y elimina espaciso inecesarios.
     value=$(sed -n "/^\[$section_id\]/,/^\[/p" "$file" \
             | grep -i "^$field_name =" \
@@ -66,18 +66,16 @@ get_config_value() {
             | cut -d'=' -f2- \
             | xargs)
 
-    # Devolvemos el valor (echo en funciones de Bash actúa como return value)
     echo "$value"
 }
 
 
-# Pasar de bytes a un formato readable to human
+# Pasar de bytes a un formato legible por humanos
 format_bytes() {
     local bytes=$1
     if [[ -z "$bytes" || "$bytes" -eq 0 ]]; then
         echo "0 B"
-        return
-     Kent
+        return     
     fi
 
     # Usamos awk para manejar las potencias de 1024 y los decimales
@@ -136,9 +134,9 @@ log_msg() {
             local razon="Desconocida"
             
             if [[ "$HAS_NOTIFY" == false && "$HAS_DISPLAY" == false ]]; then
-                razon="Falta binario 'notify-send' Y no se detectó entorno gráfico"
+                razon="Falta 'notify-send' Y no se detectó entorno gráfico"
             elif [[ "$HAS_NOTIFY" == false ]]; then
-                razon="El binario 'notify-send' no está instalado"
+                razon="El 'notify-send' no está instalado"
             elif [[ "$HAS_DISPLAY" == false ]]; then
                 razon="No hay una sesión gráfica activa (DISPLAY/WAYLAND no detectado)"
             fi
@@ -154,7 +152,7 @@ log_msg() {
 #
 # Todas las rutas que se procesan con la función get_expanded_paths,
 # siempre son guardadas entre comillas, sea una o varias por ID.
-# Tened esto en cuenta para los susos futuros y evitar dolores de cabeza.
+# Esto es importante  esto para los susos futuros y evitar dolores problemas.
 # Bash interpreta las comillas dentro de una variable como texto.
 # Para que bash interprete las comillas como contenedores y no como texto:
 # 	eval: obliga a reinterpretar el contenido de la variable.
@@ -166,7 +164,7 @@ log_msg() {
 # =============================================================================
 # FASE 1: CONFIGURACIÓN Y VALIDACIONES CRITICAS
 #
-# Asegurar las condiciones inciales adecuadas para un fucnionamiento adecuado.
+# Asegurar las condiciones inciales adecuadas para un fucionamiento adecuado.
 # =============================================================================
 
 
@@ -181,7 +179,7 @@ fi
 
 if [ ! -f "$LOG_FILE" ]; then
     touch "$LOG_FILE" || { echo "CRITICAL: No se pudo crear el archivo de logs."; exit 1; }
-    # Iniciamos con un mensaje en terminal ya que log_msg no está definida
+    # Iniciamos con un mensaje en terminal ya que log_msg no está definida aún (se define más abajo en el codigo)
     echo "$(date '+%Y-%m-%d %H:%M:%S') [WARN] [SYSTEM] : Inicio de nueva bitácora." >> "$LOG_FILE"
 fi
 
@@ -225,7 +223,7 @@ mkdir -p "$CONFIG_DIR" "$STATE_DIR"
 # 2. Archivo de Configuración
 #
 if [[ ! -f "$CONFIG_FILE" || ! -s "$CONFIG_FILE" ]]; then
-   log_msg "WARN" "SYSTEM" "Archivo de configuración no existe o esta vacio." 
+   log_msg "WARN" "SYSTEM" "Archivo de configuración no existe o esta vacío." 
    cat <<EOF > "$CONFIG_FILE"
 # =============================================================================
 #            CONFIGURACIÓN DEL GESTOR DE BACKUPS (BORG_MANAGER)
@@ -249,7 +247,7 @@ if [[ ! -f "$CONFIG_FILE" || ! -s "$CONFIG_FILE" ]]; then
 rutas = ~/Backups/Borg-Backups/Repository
 encryption = none #por defecto los backups se guardan sin encriptar.
 
-[101] # Bitacora
+[101] # Bitácora
 # frecuencia: Cada cuánto tiempo comprimir el log actual (Ej: 2592000 = 1 mes).
 frecuencia = 2592000 # Cada mes
 # retención: Cuántos archivos .zip históricos conservar en la carpeta de logs.
@@ -512,7 +510,7 @@ for id_check in 102 103; do
         fi
     fi
 
-    # 4. Lógica de Reparación (Normalización Binaria)
+    # 4. Lógica de Reparación
     if [ "$C_REPAIR_RAW" == "true" ]; then
         declare "CHECK_REPAIR_${id_check}=0"
     else
@@ -674,7 +672,7 @@ for NOMBRE_CONF in "${IDS[@]}"; do
                     log_msg "WARN" "ID_$FINAL_ID" "Política inválida omitida: $CMD $VAL"
                 fi
             done
-            # Fail-safe
+            # # Si tras el filtrado no quedan políticas válidas, fuerza el estándar semanal
             if [ -z "$(echo "$RET_VALIDA" | xargs)" ]; then
                 RET_VALIDA="--keep-daily 7"
                 log_msg "WARN" "ID_$FINAL_ID" "Sin políticas válidas. Default: --keep-daily 7"
@@ -682,7 +680,7 @@ for NOMBRE_CONF in "${IDS[@]}"; do
         fi
         RET=$(echo "$RET_VALIDA" | xargs)
 
-        # 4. Rutas (Tu lógica original de validación)
+        # 4. lógica de validación de Rutas
         RUTAS=$(get_expanded_paths "$STRIPPED_CONFIG" "$NOMBRE_CONF")
         
         RUTAS_EXISTENTES=""
@@ -729,7 +727,7 @@ for NOMBRE_CONF in "${IDS[@]}"; do
     [ "$ULTIMO_E" -eq 0 ] && T_TRANS=0
     T_FALTANTE=$((FREQ - T_TRANS))
 
-    # Reset de estado si es necesario
+    # Reset: Si el tiempo expiró y no hay un proceso activo, marcar como PENDIENTE
     if [[ "$ESTADO_E" != "EN-PROCESO" ]]; then
         if (( T_FALTANTE <= 0 || ULTIMO_E == 0 )); then
             ESTADO_E="PENDIENTE"
@@ -818,10 +816,6 @@ sync_state_times() {
 	#Si hay un tiempo faltante mayor a la frecuencia, probablemente se deba a un desajuste temporal, como hora del sistema atrasada.
         if [[ "$estado" == "REALIZADO" ]] && [ $faltante -ge $frecuencia ]; then
             nuevo_estado="PENDIENTE"
-echo "--------------------------------------------------------------"	
-echo "[AUD1]: IDENTIFICO COMO PENDIENTE POR SER FALTANTE MAYOR O IGUAL A FRECUENCIA"
-echo "--------------------------------------------------------------"	
-
 
         fi	
 	#Pasa a PENDIENTE si el el tiempo faltante esta en valores negativos (tiempo de retraso).
@@ -877,7 +871,7 @@ get_priority_queue() {
     echo "$resultado"
 }
 
-# --- [SActualizar los Estados] ---
+# --- [Actualizar los Estados] ---
 
 log_msg "INFO" "SYSTEM" "Sincronizando tiempos de ejecución..."
 
@@ -942,25 +936,13 @@ else
                 ahora_unix=$(date +%s)
                 sed -i "/^\[101\]/,/^$/ { s/^estado =.*/estado = REALIZADO/; s/^ultimo_exito =.*/ultimo_exito = $ahora_unix/ }" "$STATE_FILE"
             
-	    #Si es la primer vez que se ejecuta el sistema, no es necesario hacer el respaldo, de hecho njo dbería hacerse para que los logs de la primer ejecución esten a la mano y no se repalden los logs de apenas unos minutos y vacie el registro
-
-echo "--------------------------------------------------------------"	
-echo "[AUD1]: EL ULTMIO EXITO DEL RESPALDO DE LOGS ES: ($ultimo_exito)"
-echo "--------------------------------------------------------------"	
-
+	    # Omitir respaldo en primera ejecución para preservar logs iniciales.
             elif [[ "$ultimo_exito" -eq 0 ]]; then
                 log_msg "WARN" "ID_101" "Respaldo omitido: Nunca antes se han realizado respaldos (poca información para respaldar)."
                 ahora_unix=$(date +%s)
                 sed -i "/^\[101\]/,/^$/ { s/^estado =.*/estado = REALIZADO/; s/^ultimo_exito =.*/ultimo_exito = $ahora_unix/ }" "$STATE_FILE"
-
-echo "--------------------------------------------------------------"	
-echo "[AUD2]: SE VALIO QUE EL ULTIMO EXITOE RA 0"
-echo "--------------------------------------------------------------"	
     
-		else
-echo "--------------------------------------------------------------"	
-echo "[AUD3]: NO SE VALIO QUE EL ULTIMO EXITOE RA 0"
-echo "--------------------------------------------------------------"	
+	    else
                 # 3. Proceder con el respaldo (Condiciones cumplidas)
                 zip_name="log_backup_$(date +%Y%m%d_%H%M%S).zip"
                 log_msg "INFO" "ID_101" "Condiciones óptimas. Creando respaldo: $zip_name"
@@ -1105,8 +1087,6 @@ echo "--------------------------------------------------------------"
             total_bytes=$((total_bytes + ${parcial:-0}))
         done
        
-        # nota: Algunos coamndos como 'du' no manejan bien las comillas. recuerda que para bash $variable("my file") no es igual "$variable"(my file)
- 
         # B. Obtener espacio disponible en el repositorio
         free_bytes=$(df -B1 $repo_dir 2>/dev/null | tail -1 | awk '{print $4}')
 
@@ -1127,7 +1107,7 @@ echo "--------------------------------------------------------------"
         margen_seguridad=$(( 1024 * 1024 * 1024 )) # 1GB
         requerido=$(( total_bytes + margen_seguridad ))
 
-        # Log detallado de la validación técnicai
+        # Log detallado de la validación
         human_requerido=$(format_bytes $requerido)
         human_total_bytes=$(format_bytes $total_bytes)
         human_free_bytes=$(format_bytes $free_bytes)
@@ -1139,7 +1119,7 @@ echo "--------------------------------------------------------------"
 	    human_faltante=$(format_bytes $faltante)
             log_msg "CRITIC" "ID_$id" "Espacio insuficiente. Faltan $human_faltante bytes para cumplir el margen de seguridad. Saltando ID."
 
-            # Rollback: Liberar ID para reintento futuro
+            # Liberar ID para reintento futuro
             sed -i "/^\[$id\]/,/^$/ { s/^estado =.*/estado = PENDIENTE/; s/^pid =.*/pid = 0/ }" "$STATE_FILE"
             continue
         fi
@@ -1199,7 +1179,7 @@ echo "--------------------------------------------------------------"
             else
 		    log_msg "WARN" "ID_$id" "El respaldo se creó, pero la limpieza (prune) reportó alertas. Más info en Logs" "true"
 
-                    # Rollback de estado para reintento en el próximo ciclo
+                    # Dejar estado en PENDIENTE para reintento en el próximo ciclo
                     sed -i "/^\[$id\]/,/^$/ { 
                     s/^estado =.*/estado = PENDIENTE/
                     s/^pid =.*/pid = 0/
@@ -1209,7 +1189,7 @@ echo "--------------------------------------------------------------"
             # Error en la creación
             log_msg "CRITIC" "ID_$id" "Fallo el borg create. El respaldo no se completó. Más info en Logs"
             
-            # Rollback de estado para reintento en el próximo ciclo
+            # Dejar estado en PENDIENTE para reintento en el próximo ciclo
             sed -i "/^\[$id\]/,/^$/ { 
                 s/^estado =.*/estado = PENDIENTE/
                 s/^pid =.*/pid = 0/

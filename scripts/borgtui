@@ -64,20 +64,20 @@ if ! command -v whiptail &> /dev/null; then
     exit 1
 fi
 
-# 2. Listas de validación (Sincronizadas con Orchestrator) 
+# 2. # Dependencias criticas del orquetador y de la TUI actual
 DEPS_CRITICAS=("borg" "mkdir" "touch" "rm" "stat" "df" "du" "nice" "date" "zip" "ps" "grep" "sed" "awk" "cut" "tr" "nano")
 FALTANTES_CRITICAS=()
 FALTANTES_OPCIONALES=()
 REPORT_MSG=""
 
-# 3. Escaneo de dependencias críticas
+# Escaneo de dependencias críticas
 for dep in "${DEPS_CRITICAS[@]}"; do
     if ! command -v "$dep" &> /dev/null; then
         FALTANTES_CRITICAS+=("$dep")
     fi
 done
 
-# 4. Escaneo de visor de logs y opcionales
+# Escaneo de visor de logs y opcionales
 if command -v lnav &> /dev/null; then
     LOG_VIEWER="lnav"
 elif command -v tail &> /dev/null; then
@@ -92,7 +92,7 @@ if ! command -v "notify-send" &> /dev/null; then
     FALTANTES_OPCIONALES+=("notify-send (Sin notificaciones de escritorio)")
 fi
 
-# 5. CONSTRUCCIÓN DEL REPORTE UNIFICADO
+# CONSTRUCCIÓN DEL REPORTE UNIFICADO
 if [ ${#FALTANTES_CRITICAS[@]} -ne 0 ] || [ ${#FALTANTES_OPCIONALES[@]} -ne 0 ]; then
     
     # Bloque de Críticas
@@ -109,7 +109,7 @@ if [ ${#FALTANTES_CRITICAS[@]} -ne 0 ] || [ ${#FALTANTES_OPCIONALES[@]} -ne 0 ];
         for opt in "${FALTANTES_OPCIONALES[@]}"; do REPORT_MSG+="  • $opt\n"; done
     fi
 
-    # Mostrar reporte y registrar en log con el nivel adecuado [cite: 7]
+    # Mostrar reporte y registrar en log con el nivel adecuado
     if [ ${#FALTANTES_CRITICAS[@]} -ne 0 ]; then
         whiptail --title "Reporte de Dependencias - ERROR" --msgbox "$REPORT_MSG" 18 70
         log_tui_action "CRITIC" "Fallo de dependencias críticas: ${FALTANTES_CRITICAS[*]}"
@@ -120,15 +120,14 @@ if [ ${#FALTANTES_CRITICAS[@]} -ne 0 ] || [ ${#FALTANTES_OPCIONALES[@]} -ne 0 ];
     fi
 fi
 
-# 6. Creación de directorios base
+# Creación de directorios base
 mkdir -p "$CONFIG_DIR" "$LOG_DIR" "$STATE_DIR"
 
 # =============================================================================
 # FASE 2: CONFIGURACIÓN INICIAL Y BOOTSTRAP
 # =============================================================================
 
-configure_orchestrator() {
-    # Función bucle para solicitar ruta hasta que sea válida o se cancele [cite: 5]
+configure_orchestrator() {   
     while true; do
         local input_path
         input_path=$(whiptail --title "Ubicación del Orquestador" \
@@ -172,7 +171,7 @@ else
     # --- CARGA NORMAL ---
     ORCHESTRATOR_PATH=$(get_conf_value "$TUI_CONFIG_FILE" "orchestrator_path")
     
-    # Validación robusta de la ruta guardada [cite: 5]
+    # Validación de la ruta guardada
     if [ ! -f "$ORCHESTRATOR_PATH" ]; then
         if whiptail --title "Error de Configuración" --yesno "La ruta guardada no es válida:\n$ORCHESTRATOR_PATH\n\n¿Desea reconfigurarla ahora?" 12 70; then
             if ! configure_orchestrator; then
@@ -230,7 +229,7 @@ while true; do
     "7" "Chequeo Profundo (Datos)" \
     "8" "Reparación de Repositorio" \
     "9" "Configurar Ubicación Orquestador" \
-    "10" "Programar ejecución automtica" \
+    "10" "Programar ejecución automática" \
     "11" "Mas Informacion" \
     "0" "Salir" 3>&1 1>&2 2>&3)	   
 
@@ -247,7 +246,7 @@ while true; do
                 lnav "$LOG_FILE"
             else
                 echo "Presione Ctrl+C para salir."
-                # Corrección del Trap y Subshell para evitar herencia de señales
+                # Ejecutar en subshell para aislar el manejo de señales.
                 ( trap 'kill $!' INT; tail -f "$LOG_FILE" & wait )
             fi
             ;;
@@ -322,9 +321,9 @@ while true; do
 "ID     | Categoría          | Estado     | Último Éxito   | Próximo Backup  | Atraso          |
 -----------------------------------------------------------------------------------------------
 $STATE_INFO" 25 100; then
-                        continue # El usuario pulsó Actualizar, el ciclo repite y AWK recalcula
+                        continue # Actualizar: El ciclo repite y AWK recalcula
                     else
-                        break    # El usuario pulsó Volver, salimos del ciclo
+                        break    # Volver: salimos del ciclo
                     fi
                 done
             fi
@@ -334,7 +333,7 @@ $STATE_INFO" 25 100; then
             # --- INFO REPOSITORIO ---
             log_tui_action "INFO" "Usuario consultando info del repositorio."
             
-            # Obtener ruta repo (Parsea ID 100)
+            # Extraer la ruta del repositorio global (ID 100
             REPO_PATH=$(sed -n '/^\[100\]/,/^\[/p' "$CONFIG_FILE" 2>/dev/null | grep "^rutas =" | cut -d'=' -f2- | sed 's/^[[:space:]]*//; s/[[:space:]]*$//' | tr -d '"' | sed "s|~|$HOME|")
 
             if [ -d "$REPO_PATH" ]; then
@@ -344,8 +343,8 @@ $STATE_INFO" 25 100; then
                 # Capturamos STDERR también para ver errores de borg
 		printf "Consultando información del repositorio..."
                 BORG_INFO=$(borg info "$REPO_PATH" 2>&1)
-                # Eliminado el tail -n 10 para mostrar todo el historial [cite: 9]
-		printf "\nConsultando lista de de backups...\n\n"
+                # Mostrar todo el historial
+		printf "\nConsultando lista de backups...\n\n"
                 BORG_LIST=$(borg list "$REPO_PATH" 2>&1)                 
                 pause_screen              
 
@@ -374,23 +373,21 @@ $STATE_INFO" 25 100; then
             ;;
 
         5)
-            # --- EJECUCIÓN MANUAL (SOLUCIÓN CRÍTICA BUCLE 11) --- 
+            # -- EJECUCIÓN MANUAL DEL ORQUESTADOR --- 
             if (whiptail --title "Confirmación" --yesno "¿Ejecutar orquestador ahora?" 10 60); then
                 log_tui_action "INFO" "Ejecución manual forzada."
-                
-                # 1. Limpiamos la pantalla visualmente
+                                
                 clear
                 
-                # 2. Reseteamos los parámetros de la terminal (TTY)
+                # Reseteamos los parámetros de la terminal (TTY)
                 # Esto elimina la configuración "raw" que deja whiptail
                 stty sane
                 
                 echo "Ejecutando Backup Manager..."
                 echo "----------------------------"
                 
-                # 3. EJECUCIÓN AISLADA EN SUBSHELL
-                # Usamos ( exec ... ) para crear un proceso nuevo limpio
-                # que no comparta los descriptores de archivo contaminados del padre.
+                # EJECUCIÓN AISLADA EN SUBSHELL
+                # Crear un proceso nuevo limpio que no comparta los descriptores de archivo del padre.
                 ( exec bash "$ORCHESTRATOR_PATH" )
                 
                 echo "----------------------------"
@@ -456,8 +453,7 @@ $STATE_INFO" 25 100; then
 	9)
             # --- CONFIGURAR PANEL (ORQUESTADOR) ---
             log_tui_action "INFO" "Usuario solicitó reconfigurar la ruta del orquestador."
-            
-            # Reutilizamos la función de la Fase 2 [cite: 15, 23]
+                        
             if configure_orchestrator; then
                 log_tui_action "INFO" "Configuración actualizada. Nueva ruta: $ORCHESTRATOR_PATH"
                 whiptail --title "Éxito" --msgbox "La ubicación del orquestador se ha actualizado correctamente." 10 60
