@@ -238,20 +238,60 @@ Este archivo es **gestionado automáticamente por el script**. Mantiene la memor
 **Ejemplo de estructura:**
 
 ```ini
+[101]
+categoria = Bitacora
+frecuencia = 2592000
+retencion = 12
+rutas = ~/Backups/Borg-Backups/Logs
+compresion = N/A
+ultimo_exito = 1770608345
+tiempo_trasncurrido = 20164
+tiempo_faltante = 2571836
+estado = REALIZADO
+
+[102]
+categoria = Chequeo Rapido
+frecuencia = 604800
+retencion = 52
+rutas = /home/usuario/Backups/Borg-Backups/Checks
+compresion = N/A
+ultimo_exito = 1770608345
+tiempo_trasncurrido = 20164
+tiempo_faltante = 584636
+estado = REALIZADO
+
+[103]
+categoria = Chequeo Profundo
+frecuencia = 2592000
+retencion = 12
+rutas = /home/usuario/Backups/Borg-Backups/Checks
+compresion = N/A
+ultimo_exito = 1770608346
+tiempo_trasncurrido = 20163
+tiempo_faltante = 2571837
+estado = REALIZADO
+
 [111]
-Categoria = Constantes
-ultimo_exito = 1704891600
-tiempo_trasncurrido = 902 #(15 minutos con 2 segundos)
-tiempo_faltante = -2 #(con frecuencia de cada 15 minutos, se necesita una respaldo hace 2 segundos)/
-estado = PENDIENTE #(Requiere backup, pero no ha inciado el proceso de backup o esta en espera de en un backup en PROCESO, (ejm. ID=103))
+categoria = Critico_Activo
+frecuencia = 900
+retencion = --keep-last 4 --keep-daily 7
+rutas = "/home/usuario/Dev"
+compresion = 1
+ultimo_exito = 1770627611
+tiempo_trasncurrido = 898
+tiempo_faltante = 2
+estado = REALIZADO
 
 [112]
-Categoria = Diarios
-ultimo_exito = 1704891600
-tiempo_trasncurrido = 86.505 (1 día más 105 segundos)
-tiempo_faltante = -105 #(con frecuencia de 1 día, se necesita el respaldo hace 104 segundos)
-estado = EN-PROCESO #(el sistema se encuentra realizando el backup con el ID 103, es decir, el grupo actual)
-
+categoria = Trabajo_Continuo
+frecuencia = 3600
+retencion = --keep-last 8 --keep-daily 7
+rutas = "/home/usuario/Docs" "/home/kaizen/Downloadas"
+compresion = 1
+ultimo_exito = 1770626709
+tiempo_trasncurrido = 1800
+tiempo_faltante = 1800
+estado = REALIZADO
 ```
 
 * **ID de Sección:** El script utiliza el ID definido en la configuración como cabecera para garantizar la persistencia de los datos.
